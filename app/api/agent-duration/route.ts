@@ -78,8 +78,9 @@ export async function GET(req: NextRequest) {
         if (!detail[key]) detail[key] = { totalSeconds: 0, chatCount: 0, thumbsUp: 0, thumbsDown: 0 };
         detail[key].totalSeconds += duration;
         detail[key].chatCount += 1;
-        if (rating === 5) detail[key].thumbsUp += 1;
-        else if (rating === 1) detail[key].thumbsDown += 1;
+        // Tawk API: 0 = no rating, 1 = thumbs up (positive), 2 = thumbs down (negative)
+        if (rating === 1) detail[key].thumbsUp += 1;
+        else if (rating === 2) detail[key].thumbsDown += 1;
       }
     }
 
