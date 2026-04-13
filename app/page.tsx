@@ -85,7 +85,7 @@ export default function Dashboard() {
   const [grandTotal, setGrandTotal] = useState({ duration: "00:00:00", chatCount: 0, thumbsUp: 0, thumbsDown: 0 });
 
   // CSAT report state
-  const [csatRows, setCsatRows] = useState<{ agent: string; likes: number }[]>([]);
+  const [csatRows, setCsatRows] = useState<{ agent: string; positive: number; negative: number }[]>([]);
 
   const [today, setToday] = useState("");
   useEffect(() => { setToday(new Date().toISOString().split("T")[0]); }, []);
@@ -185,19 +185,21 @@ export default function Dashboard() {
         });
       } else {
         // CSAT report
-        const likesMap: Record<string, number> = {};
+        const ratingMap: Record<string, { positive: number; negative: number }> = {};
         for (let i = 0; i < chunks.length; i++) {
           setProgress(`Week ${i + 1} of ${chunks.length}`);
           const res = await fetch(`/api/agent-duration?startDate=${chunks[i].start}&endDate=${chunks[i].end}`);
           if (!res.ok) throw new Error(await res.text());
           const data = await res.json();
           for (const row of data.summary as AgentSummaryRow[]) {
-            likesMap[row.agent] = (likesMap[row.agent] || 0) + row.thumbsUp;
+            if (!ratingMap[row.agent]) ratingMap[row.agent] = { positive: 0, negative: 0 };
+            ratingMap[row.agent].positive += row.thumbsUp;
+            ratingMap[row.agent].negative += row.thumbsDown;
           }
         }
-        const rows = Object.entries(likesMap)
-          .map(([agent, likes]) => ({ agent, likes }))
-          .sort((a, b) => b.likes - a.likes);
+        const rows = Object.entries(ratingMap)
+          .map(([agent, r]) => ({ agent, positive: r.positive, negative: r.negative }))
+          .sort((a, b) => b.positive - a.positive);
         setCsatRows(rows);
       }
     } catch (err) {
@@ -247,13 +249,14 @@ export default function Dashboard() {
   }
 
   function downloadCsatCSV() {
-    const lines = [["Agent Name", "No of Likes"].join(",")];
+    const lines = [["Agent Name", "Positive Ratings", "Negative Ratings"].join(",")];
     for (const row of csatRows) {
-      lines.push([escapeCSV(row.agent), row.likes].join(","));
+      lines.push([escapeCSV(row.agent), row.positive, row.negative].join(","));
     }
-    const total = csatRows.reduce((s, r) => s + r.likes, 0);
-    lines.push(["TOTAL", total].join(","));
-    downloadCSV(`agent_likes_${startDate}_to_${endDate}.csv`, lines.join("\n"));
+    const totalPos = csatRows.reduce((s, r) => s + r.positive, 0);
+    const totalNeg = csatRows.reduce((s, r) => s + r.negative, 0);
+    lines.push(["TOTAL", totalPos, totalNeg].join(","));
+    downloadCSV(`agent_ratings_${startDate}_to_${endDate}.csv`, lines.join("\n"));
   }
 
   // ─── Render ─────────────────────────────────────────
@@ -499,7 +502,8 @@ export default function Dashboard() {
                 <thead>
                   <tr className="bg-gray-900 text-white">
                     <th className="px-6 py-3 text-left font-medium">Agent Name</th>
-                    <th className="px-6 py-3 text-center font-medium">No of Likes</th>
+                    <th className="px-6 py-3 text-center font-medium">Positive Ratings</th>
+                    <th className="px-6 py-3 text-center font-medium">Negative Ratings</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -507,10 +511,15 @@ export default function Dashboard() {
                     <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                       <td className="px-6 py-3">{row.agent}</td>
                       <td className="px-6 py-3 text-center">
-                        {row.likes > 0 ? (
-                          <span className="inline-flex items-center gap-1 text-green-600 font-semibold">
-                            <span>👍</span> {row.likes}
-                          </span>
+                        {row.positive > 0 ? (
+                          <span className="font-semibold text-green-600">{row.positive}</span>
+                        ) : (
+                          <span className="text-gray-300">0</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-3 text-center">
+                        {row.negative > 0 ? (
+                          <span className="font-semibold text-red-500">{row.negative}</span>
                         ) : (
                           <span className="text-gray-300">0</span>
                         )}
@@ -519,10 +528,11 @@ export default function Dashboard() {
                   ))}
                   <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">
                     <td className="px-6 py-3">TOTAL</td>
-                    <td className="px-6 py-3 text-center">
-                      <span className="inline-flex items-center gap-1 text-green-600">
-                        <span>👍</span> {csatRows.reduce((s, r) => s + r.likes, 0)}
-                      </span>
+                    <td className="px-6 py-3 text-center text-green-700">
+                      {csatRows.reduce((s, r) => s + r.positive, 0)}
+                    </td>
+                    <td className="px-6 py-3 text-center text-red-600">
+                      {csatRows.reduce((s, r) => s + r.negative, 0)}
                     </td>
                   </tr>
                 </tbody>

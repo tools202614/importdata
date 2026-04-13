@@ -56,9 +56,9 @@ export async function GET(req: NextRequest) {
         pd.chat += 1;
 
         const rating = (chat as Record<string, unknown>).rating as number;
-        // Tawk API: 0 = no rating, 1 = thumbs up (positive), 2 = thumbs down (negative)
+        // Tawk API: 0 = no rating, 1 = thumbs up (positive), -1 = thumbs down (negative)
         if (rating === 1) { pd.thumbsUp += 1; allHours[key].totalThumbsUp += 1; }
-        else if (rating === 2) { pd.thumbsDown += 1; allHours[key].totalThumbsDown += 1; }
+        else if (rating === -1) { pd.thumbsDown += 1; allHours[key].totalThumbsDown += 1; }
 
         if ((chat as Record<string, unknown>).offlineForm) {
           pd.offline += 1; allHours[key].totalOffline += 1;
