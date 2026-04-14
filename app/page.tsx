@@ -85,7 +85,7 @@ export default function Dashboard() {
   const [grandTotal, setGrandTotal] = useState({ duration: "00:00:00", chatCount: 0, thumbsUp: 0, thumbsDown: 0 });
 
   // CSAT report state
-  const [csatRows, setCsatRows] = useState<{ agent: string; positive: number; negative: number }[]>([]);
+  const [csatRows, setCsatRows] = useState<{ agent: string; positive: number; negative: number; neutral: number }[]>([]);
 
   const [today, setToday] = useState("");
   useEffect(() => { setToday(new Date().toISOString().split("T")[0]); }, []);
@@ -185,20 +185,21 @@ export default function Dashboard() {
         });
       } else {
         // CSAT report
-        const ratingMap: Record<string, { positive: number; negative: number }> = {};
+        const ratingMap: Record<string, { positive: number; negative: number; chats: number }> = {};
         for (let i = 0; i < chunks.length; i++) {
           setProgress(`Week ${i + 1} of ${chunks.length}`);
           const res = await fetch(`/api/agent-duration?startDate=${chunks[i].start}&endDate=${chunks[i].end}`);
           if (!res.ok) throw new Error(await res.text());
           const data = await res.json();
           for (const row of data.summary as AgentSummaryRow[]) {
-            if (!ratingMap[row.agent]) ratingMap[row.agent] = { positive: 0, negative: 0 };
+            if (!ratingMap[row.agent]) ratingMap[row.agent] = { positive: 0, negative: 0, chats: 0 };
             ratingMap[row.agent].positive += row.thumbsUp;
             ratingMap[row.agent].negative += row.thumbsDown;
+            ratingMap[row.agent].chats += row.chatCount;
           }
         }
         const rows = Object.entries(ratingMap)
-          .map(([agent, r]) => ({ agent, positive: r.positive, negative: r.negative }))
+          .map(([agent, r]) => ({ agent, positive: r.positive, negative: r.negative, neutral: r.chats - r.positive - r.negative }))
           .sort((a, b) => b.positive - a.positive);
         setCsatRows(rows);
       }
@@ -249,13 +250,14 @@ export default function Dashboard() {
   }
 
   function downloadCsatCSV() {
-    const lines = [["Agent Name", "Positive Ratings", "Negative Ratings"].join(",")];
+    const lines = [["Agent Name", "Positive Ratings", "Negative Ratings", "Neutral"].join(",")];
     for (const row of csatRows) {
-      lines.push([escapeCSV(row.agent), row.positive, row.negative].join(","));
+      lines.push([escapeCSV(row.agent), row.positive, row.negative, row.neutral].join(","));
     }
     const totalPos = csatRows.reduce((s, r) => s + r.positive, 0);
     const totalNeg = csatRows.reduce((s, r) => s + r.negative, 0);
-    lines.push(["TOTAL", totalPos, totalNeg].join(","));
+    const totalNeu = csatRows.reduce((s, r) => s + r.neutral, 0);
+    lines.push(["TOTAL", totalPos, totalNeg, totalNeu].join(","));
     downloadCSV(`agent_ratings_${startDate}_to_${endDate}.csv`, lines.join("\n"));
   }
 
@@ -502,8 +504,9 @@ export default function Dashboard() {
                 <thead>
                   <tr className="bg-gray-900 text-white">
                     <th className="px-6 py-3 text-left font-medium">Agent Name</th>
-                    <th className="px-6 py-3 text-center font-medium">Positive Ratings</th>
-                    <th className="px-6 py-3 text-center font-medium">Negative Ratings</th>
+                    <th className="px-6 py-3 text-center font-medium">Positive</th>
+                    <th className="px-6 py-3 text-center font-medium">Negative</th>
+                    <th className="px-6 py-3 text-center font-medium">Neutral</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -524,6 +527,13 @@ export default function Dashboard() {
                           <span className="text-gray-300">0</span>
                         )}
                       </td>
+                      <td className="px-6 py-3 text-center">
+                        {row.neutral > 0 ? (
+                          <span className="font-semibold text-gray-600">{row.neutral}</span>
+                        ) : (
+                          <span className="text-gray-300">0</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                   <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">
@@ -533,6 +543,9 @@ export default function Dashboard() {
                     </td>
                     <td className="px-6 py-3 text-center text-red-600">
                       {csatRows.reduce((s, r) => s + r.negative, 0)}
+                    </td>
+                    <td className="px-6 py-3 text-center text-gray-700">
+                      {csatRows.reduce((s, r) => s + r.neutral, 0)}
                     </td>
                   </tr>
                 </tbody>

@@ -65,6 +65,7 @@ async function fetchAllPages(
   dateType: string,
   pageSize: number
 ): Promise<TawkItem[]> {
+  const seen = new Set<string>();
   const all: TawkItem[] = [];
   let page = 0;
 
@@ -79,9 +80,21 @@ async function fetchAllPages(
       sort: "co-new-old",
       dateType,
     });
-    all.push(...items);
+
+    // Deduplicate: Tawk API pagination can return the same items on every page.
+    // Stop when we see no new items.
+    let newCount = 0;
+    for (const item of items) {
+      const id = item.id;
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        all.push(item);
+        newCount++;
+      }
+    }
 
     if (items.length < pageSize) break;
+    if (newCount === 0) break; // All items already seen — pagination is cycling
     page++;
     if (page > 50) break;
   }
