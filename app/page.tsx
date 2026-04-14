@@ -90,23 +90,17 @@ export default function Dashboard() {
   const [today, setToday] = useState("");
   useEffect(() => { setToday(new Date().toISOString().split("T")[0]); }, []);
 
-  // Split a date range into weekly chunks to avoid rate limits and timeouts
-  function getWeeklyChunks(start: string, end: string): { start: string; end: string }[] {
+  // Split a date range into daily chunks — Tawk API pagination is broken
+  // (returns same data on every page), so we must keep each chunk small
+  // enough that all chats fit in a single page (~200-500 per property per day).
+  function getDailyChunks(start: string, end: string): { start: string; end: string }[] {
     const chunks: { start: string; end: string }[] = [];
     const endDate = new Date(end);
     let cursor = new Date(start);
 
     while (cursor <= endDate) {
-      const chunkEnd = new Date(cursor);
-      chunkEnd.setDate(chunkEnd.getDate() + 6); // 7-day chunk
-      const actualEnd = chunkEnd > endDate ? endDate : chunkEnd;
-
-      chunks.push({
-        start: `${cursor.toISOString().split("T")[0]}T00:00:00Z`,
-        end: `${actualEnd.toISOString().split("T")[0]}T23:59:59Z`,
-      });
-
-      cursor = new Date(actualEnd);
+      const day = cursor.toISOString().split("T")[0];
+      chunks.push({ start: `${day}T00:00:00Z`, end: `${day}T23:59:59Z` });
       cursor.setDate(cursor.getDate() + 1);
     }
     return chunks;
@@ -125,14 +119,14 @@ export default function Dashboard() {
     setProgress("");
     const timer = setInterval(() => setElapsed((e) => e + 1), 1000);
 
-    const chunks = getWeeklyChunks(startDate, endDate);
+    const chunks = getDailyChunks(startDate, endDate);
 
     try {
       if (tab === "hourly") {
         let allRows: HourlyRow[] = [];
         let props: string[] = [];
         for (let i = 0; i < chunks.length; i++) {
-          setProgress(`Week ${i + 1} of ${chunks.length}`);
+          setProgress(`Day ${i + 1} of ${chunks.length}`);
           const res = await fetch(`/api/hourly-report?startDate=${chunks[i].start}&endDate=${chunks[i].end}`);
           if (!res.ok) throw new Error(await res.text());
           const data = await res.json();
@@ -152,7 +146,7 @@ export default function Dashboard() {
         let allSummary: AgentSummaryRow[] = [];
         let allDetail: AgentDetailRow[] = [];
         for (let i = 0; i < chunks.length; i++) {
-          setProgress(`Week ${i + 1} of ${chunks.length}`);
+          setProgress(`Day ${i + 1} of ${chunks.length}`);
           const res = await fetch(`/api/agent-duration?startDate=${chunks[i].start}&endDate=${chunks[i].end}`);
           if (!res.ok) throw new Error(await res.text());
           const data = await res.json();
@@ -187,7 +181,7 @@ export default function Dashboard() {
         // CSAT report
         const ratingMap: Record<string, { positive: number; negative: number; chats: number }> = {};
         for (let i = 0; i < chunks.length; i++) {
-          setProgress(`Week ${i + 1} of ${chunks.length}`);
+          setProgress(`Day ${i + 1} of ${chunks.length}`);
           const res = await fetch(`/api/agent-duration?startDate=${chunks[i].start}&endDate=${chunks[i].end}`);
           if (!res.ok) throw new Error(await res.text());
           const data = await res.json();

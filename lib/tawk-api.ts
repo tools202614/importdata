@@ -146,10 +146,10 @@ async function fetchItems(
   });
 }
 
-export async function getChats(propertyId: string, startDate: string, endDate: string, pageSize = 200) {
+export async function getChats(propertyId: string, startDate: string, endDate: string, pageSize = 500) {
   return fetchItems(`${BASE_URL}/chat.list`, propertyId, startDate, endDate, pageSize);
 }
 
-export async function getTickets(propertyId: string, startDate: string, endDate: string, pageSize = 200) {
+export async function getTickets(propertyId: string, startDate: string, endDate: string, pageSize = 500) {
   return fetchItems(`${BASE_URL}/ticket.list`, propertyId, startDate, endDate, pageSize);
 }
