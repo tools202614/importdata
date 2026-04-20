@@ -133,12 +133,11 @@ export default function Dashboard() {
           allRows = allRows.concat(data.rows);
           props = data.properties;
         }
-        // Sort newest first
+        // Sort chronologically (oldest first, then 12 AM → 11 PM within each day)
         allRows.sort((a, b) => {
-          const da = new Date(a.date).getTime();
-          const db = new Date(b.date).getTime();
-          if (da !== db) return db - da;
-          return b.time.localeCompare(a.time);
+          const ta = new Date(`${a.date} ${a.time}`).getTime();
+          const tb = new Date(`${b.date} ${b.time}`).getTime();
+          return ta - tb;
         });
         setHourlyRows(allRows);
         setPropertyNames(props);

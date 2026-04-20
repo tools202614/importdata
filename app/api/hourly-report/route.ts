@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
     const PH_OFFSET_MS = 8 * 60 * 60 * 1000;
 
     const rows = Object.entries(allHours)
-      .sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime())
+      .sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime())
       .map(([hourUtc, data]) => {
         const phTime = new Date(new Date(hourUtc).getTime() + PH_OFFSET_MS);
         const date = phTime.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "2-digit" });
