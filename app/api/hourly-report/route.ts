@@ -41,14 +41,14 @@ function chatDurationSec(c: ChatItem): number | null {
 }
 
 function firstResponseSec(c: ChatItem): number | null {
-  const msgs = c.messages || [];
-  let firstVisitor: number | null = null;
-  for (const m of msgs) {
-    const t = m.sender?.t;
-    if (t === "v" && m.time && firstVisitor === null) {
-      firstVisitor = new Date(m.time).getTime();
-    } else if (t === "a" && m.time && firstVisitor !== null) {
-      return Math.max(0, (new Date(m.time).getTime() - firstVisitor) / 1000);
+  // FRT = time from chat creation (queue/assignment) to first agent message.
+  // Matches Tawk dashboard's "First Response Time" metric.
+  if (!c.createdOn) return null;
+  const createdMs = new Date(c.createdOn).getTime();
+  for (const m of c.messages || []) {
+    if (m.sender?.t === "a" && m.time) {
+      const agentMs = new Date(m.time).getTime();
+      if (agentMs >= createdMs) return (agentMs - createdMs) / 1000;
     }
   }
   return null;
