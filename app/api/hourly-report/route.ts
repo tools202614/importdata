@@ -87,24 +87,27 @@ export async function GET(req: NextRequest) {
           buckets[key] = { chats: 0, totalDurationSec: 0, durationCount: 0, totalFrtSec: 0, frtCount: 0, missed: 0 };
         }
         const b = buckets[key];
-        b.chats += 1;
 
-        const dur = chatDurationSec(chat);
-        if (dur !== null && dur > 0) {
-          b.totalDurationSec += dur;
-          b.durationCount += 1;
-        }
+        const hadAgent = (chat.messages || []).some((m) => m.sender?.t === "a");
 
-        const frt = firstResponseSec(chat);
-        if (frt !== null) {
-          b.totalFrtSec += frt;
-          b.frtCount += 1;
-        }
+        if (hadAgent) {
+          // Handled: an agent actually participated in this chat
+          b.chats += 1;
 
-        // Missed = chat that never got an agent response (no offline form, no agent message)
-        if (!chat.offlineForm) {
-          const hadAgent = (chat.messages || []).some((m) => m.sender?.t === "a");
-          if (!hadAgent) b.missed += 1;
+          const dur = chatDurationSec(chat);
+          if (dur !== null && dur > 0) {
+            b.totalDurationSec += dur;
+            b.durationCount += 1;
+          }
+
+          const frt = firstResponseSec(chat);
+          if (frt !== null) {
+            b.totalFrtSec += frt;
+            b.frtCount += 1;
+          }
+        } else if (!chat.offlineForm) {
+          // Missed: live chat where no agent responded (offline form submissions don't count)
+          b.missed += 1;
         }
       }
     }
