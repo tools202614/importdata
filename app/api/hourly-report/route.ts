@@ -1,23 +1,67 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getChats, getTickets } from "@/lib/tawk-api";
+import { getChats } from "@/lib/tawk-api";
 import { PROPERTIES } from "@/lib/properties";
 
 export const maxDuration = 300;
 
-const emptyProp = () => ({ chat: 0, missed: 0, offline: 0, tickets: 0, thumbsUp: 0, thumbsDown: 0 });
+interface ChatItem {
+  createdOn?: string;
+  status?: string;
+  offlineForm?: unknown;
+  chatDuration?: number;
+  duration?: number;
+  endedOn?: string;
+  messages?: { sender?: { t?: string }; time?: string }[];
+  rating?: number;
+  [key: string]: unknown;
+}
 
-interface PropertyBucket { chat: number; missed: number; offline: number; tickets: number; thumbsUp: number; thumbsDown: number }
-interface DayBucket {
-  totalChats: number; totalTickets: number; totalOffline: number; totalMissed: number;
-  totalThumbsUp: number; totalThumbsDown: number;
-  perProperty: Record<string, PropertyBucket>;
+interface PropDayBucket {
+  chats: number;
+  totalDurationSec: number;
+  durationCount: number;
+  totalFrtSec: number;
+  frtCount: number;
+  missed: number;
 }
 
 const PH_OFFSET_MS = 8 * 60 * 60 * 1000;
 
 function phDateKey(iso: string): string {
-  const phTime = new Date(new Date(iso).getTime() + PH_OFFSET_MS);
-  return phTime.toISOString().split("T")[0];
+  return new Date(new Date(iso).getTime() + PH_OFFSET_MS).toISOString().split("T")[0];
+}
+
+function chatDurationSec(c: ChatItem): number | null {
+  if (typeof c.chatDuration === "number") return c.chatDuration;
+  if (typeof c.duration === "number") return c.duration;
+  if (c.createdOn && c.endedOn) {
+    return Math.max(0, (new Date(c.endedOn).getTime() - new Date(c.createdOn).getTime()) / 1000);
+  }
+  return null;
+}
+
+function firstResponseSec(c: ChatItem): number | null {
+  const msgs = c.messages || [];
+  let firstVisitor: number | null = null;
+  for (const m of msgs) {
+    const t = m.sender?.t;
+    if (t === "v" && m.time && firstVisitor === null) {
+      firstVisitor = new Date(m.time).getTime();
+    } else if (t === "a" && m.time && firstVisitor !== null) {
+      return Math.max(0, (new Date(m.time).getTime() - firstVisitor) / 1000);
+    }
+  }
+  return null;
+}
+
+function formatMS(seconds: number): string {
+  if (seconds <= 0) return "0";
+  const s = Math.floor(seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
 export async function GET(req: NextRequest) {
@@ -30,82 +74,62 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const allDays: Record<string, DayBucket> = {};
-
-    // Pre-create day buckets in PH time
-    const startKey = phDateKey(startDate);
-    const endKey = phDateKey(endDate);
-    const cursor = new Date(`${startKey}T00:00:00Z`);
-    const lastDay = new Date(`${endKey}T00:00:00Z`);
-    while (cursor <= lastDay) {
-      const dayKey = cursor.toISOString().split("T")[0];
-      allDays[dayKey] = {
-        totalChats: 0, totalTickets: 0, totalOffline: 0, totalMissed: 0,
-        totalThumbsUp: 0, totalThumbsDown: 0, perProperty: {},
-      };
-      cursor.setUTCDate(cursor.getUTCDate() + 1);
-    }
+    // key = `${dateKey}|${propertyName}`
+    const buckets: Record<string, PropDayBucket> = {};
 
     for (const prop of PROPERTIES) {
-      const [chats, tickets] = await Promise.all([
-        getChats(prop.id, startDate, endDate),
-        getTickets(prop.id, startDate, endDate),
-      ]);
+      const chats = (await getChats(prop.id, startDate, endDate)) as ChatItem[];
 
       for (const chat of chats) {
         if (!chat.createdOn) continue;
-        const key = phDateKey(chat.createdOn as string);
-        if (!allDays[key]) continue;
-
-        allDays[key].totalChats += 1;
-        if (!allDays[key].perProperty[prop.id]) allDays[key].perProperty[prop.id] = emptyProp();
-        const pd = allDays[key].perProperty[prop.id];
-        pd.chat += 1;
-
-        const rating = (chat as Record<string, unknown>).rating as number;
-        // Tawk API: 0 = no rating, 1 = thumbs up (positive), -1 = thumbs down (negative)
-        if (rating === 1) { pd.thumbsUp += 1; allDays[key].totalThumbsUp += 1; }
-        else if (rating === -1) { pd.thumbsDown += 1; allDays[key].totalThumbsDown += 1; }
-
-        if ((chat as Record<string, unknown>).offlineForm) {
-          pd.offline += 1; allDays[key].totalOffline += 1;
-        } else if ((chat as Record<string, unknown>).status === "open") {
-          pd.missed += 1; allDays[key].totalMissed += 1;
+        const dateKey = phDateKey(chat.createdOn);
+        const key = `${dateKey}|${prop.name}`;
+        if (!buckets[key]) {
+          buckets[key] = { chats: 0, totalDurationSec: 0, durationCount: 0, totalFrtSec: 0, frtCount: 0, missed: 0 };
         }
-      }
+        const b = buckets[key];
+        b.chats += 1;
 
-      for (const ticket of tickets) {
-        if (!ticket.createdOn) continue;
-        const key = phDateKey(ticket.createdOn as string);
-        if (!allDays[key]) continue;
+        const dur = chatDurationSec(chat);
+        if (dur !== null && dur > 0) {
+          b.totalDurationSec += dur;
+          b.durationCount += 1;
+        }
 
-        allDays[key].totalTickets += 1;
-        if (!allDays[key].perProperty[prop.id]) allDays[key].perProperty[prop.id] = emptyProp();
-        allDays[key].perProperty[prop.id].tickets += 1;
+        const frt = firstResponseSec(chat);
+        if (frt !== null) {
+          b.totalFrtSec += frt;
+          b.frtCount += 1;
+        }
+
+        // Missed = chat that never got an agent response (no offline form, no agent message)
+        if (!chat.offlineForm) {
+          const hadAgent = (chat.messages || []).some((m) => m.sender?.t === "a");
+          if (!hadAgent) b.missed += 1;
+        }
       }
     }
 
-    const rows = Object.entries(allDays)
+    const rows = Object.entries(buckets)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([dayKey, data]) => {
-        const phDate = new Date(`${dayKey}T00:00:00Z`);
+      .map(([key, b]) => {
+        const [dateKey, property] = key.split("|");
+        const phDate = new Date(`${dateKey}T00:00:00Z`);
         const date = phDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "2-digit", timeZone: "UTC" });
-
-        const propertyData: Record<string, PropertyBucket> = {};
-        for (const prop of PROPERTIES) {
-          propertyData[prop.name] = data.perProperty[prop.id] || emptyProp();
-        }
-
+        const avgAHT = b.durationCount > 0 ? b.totalDurationSec / b.durationCount : 0;
+        const avgFRT = b.frtCount > 0 ? b.totalFrtSec / b.frtCount : 0;
         return {
           date,
-          totalChats: data.totalChats, totalTickets: data.totalTickets,
-          totalOffline: data.totalOffline, totalMissed: data.totalMissed,
-          totalThumbsUp: data.totalThumbsUp, totalThumbsDown: data.totalThumbsDown,
-          properties: propertyData,
+          dateKey,
+          property,
+          totalChats: b.chats,
+          avgAHT: formatMS(avgAHT),
+          avgFRT: formatMS(avgFRT),
+          missedChats: b.missed,
         };
       });
 
-    return NextResponse.json({ rows, properties: PROPERTIES.map((p) => p.name) });
+    return NextResponse.json({ rows });
   } catch (err) {
     console.error("Daily report error:", err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
