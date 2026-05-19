@@ -8,8 +8,8 @@ interface PropertyData {
   thumbsUp: number; thumbsDown: number;
 }
 
-interface HourlyRow {
-  date: string; time: string;
+interface DailyRow {
+  date: string;
   totalChats: number; totalTickets: number; totalOffline: number; totalMissed: number;
   totalThumbsUp: number; totalThumbsDown: number;
   properties: Record<string, PropertyData>;
@@ -68,14 +68,14 @@ function escapeCSV(val: string | number) {
 
 // ─── Component ───────────────────────────────────────
 export default function Dashboard() {
-  const [tab, setTab] = useState<"hourly" | "agent" | "csat">("hourly");
+  const [tab, setTab] = useState<"report" | "agent" | "csat">("report");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState("");
 
-  const [hourlyRows, setHourlyRows] = useState<HourlyRow[]>([]);
+  const [dailyRows, setDailyRows] = useState<DailyRow[]>([]);
   const [propertyNames, setPropertyNames] = useState<string[]>([]);
   const [hideZeroRows, setHideZeroRows] = useState(true);
 
@@ -122,24 +122,46 @@ export default function Dashboard() {
     const chunks = getDailyChunks(startDate, endDate);
 
     try {
-      if (tab === "hourly") {
-        let allRows: HourlyRow[] = [];
+      if (tab === "report") {
+        const rowMap: Record<string, DailyRow> = {};
         let props: string[] = [];
         for (let i = 0; i < chunks.length; i++) {
           setProgress(`Day ${i + 1} of ${chunks.length}`);
           const res = await fetch(`/api/hourly-report?startDate=${chunks[i].start}&endDate=${chunks[i].end}`);
           if (!res.ok) throw new Error(await res.text());
           const data = await res.json();
-          allRows = allRows.concat(data.rows);
           props = data.properties;
+          // Merge: same date may appear across multiple chunks (PH timezone shift)
+          for (const row of data.rows as DailyRow[]) {
+            const existing = rowMap[row.date];
+            if (!existing) {
+              rowMap[row.date] = row;
+            } else {
+              existing.totalChats += row.totalChats;
+              existing.totalTickets += row.totalTickets;
+              existing.totalOffline += row.totalOffline;
+              existing.totalMissed += row.totalMissed;
+              existing.totalThumbsUp += row.totalThumbsUp;
+              existing.totalThumbsDown += row.totalThumbsDown;
+              for (const name of Object.keys(row.properties)) {
+                const ep = existing.properties[name] || { chat: 0, missed: 0, offline: 0, tickets: 0, thumbsUp: 0, thumbsDown: 0 };
+                const rp = row.properties[name];
+                existing.properties[name] = {
+                  chat: ep.chat + rp.chat,
+                  missed: ep.missed + rp.missed,
+                  offline: ep.offline + rp.offline,
+                  tickets: ep.tickets + rp.tickets,
+                  thumbsUp: ep.thumbsUp + rp.thumbsUp,
+                  thumbsDown: ep.thumbsDown + rp.thumbsDown,
+                };
+              }
+            }
+          }
         }
-        // Sort chronologically (oldest first, then 12 AM → 11 PM within each day)
-        allRows.sort((a, b) => {
-          const ta = new Date(`${a.date} ${a.time}`).getTime();
-          const tb = new Date(`${b.date} ${b.time}`).getTime();
-          return ta - tb;
-        });
-        setHourlyRows(allRows);
+        const allRows = Object.values(rowMap).sort(
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+        setDailyRows(allRows);
         setPropertyNames(props);
       } else if (tab === "agent") {
         let allSummary: AgentSummaryRow[] = [];
@@ -206,22 +228,22 @@ export default function Dashboard() {
   }
 
   // ─── CSV Downloads ──────────────────────────────────
-  function downloadHourlyCSV() {
-    const headerCols = ["Date", "Time", "Total Chats", "Total Tickets", "Total Offline", "Total Missed", "Thumbs Up", "Thumbs Down"];
+  function downloadDailyCSV() {
+    const headerCols = ["Date", "Total Chats", "Total Tickets", "Total Offline", "Total Missed", "Thumbs Up", "Thumbs Down"];
     for (const name of propertyNames) {
       headerCols.push(`${name} Chat Volume`, `${name} Missed Chats`, `${name} Offline Messages`, `${name} New Ticket Volume`, `${name} Thumbs Up`, `${name} Thumbs Down`);
     }
 
     const lines = [headerCols.map(escapeCSV).join(",")];
-    for (const row of hourlyRows) {
-      const cols: (string | number)[] = [row.date, row.time, row.totalChats, row.totalTickets, row.totalOffline, row.totalMissed, row.totalThumbsUp, row.totalThumbsDown];
+    for (const row of dailyRows) {
+      const cols: (string | number)[] = [row.date, row.totalChats, row.totalTickets, row.totalOffline, row.totalMissed, row.totalThumbsUp, row.totalThumbsDown];
       for (const name of propertyNames) {
         const p = row.properties[name] || { chat: 0, missed: 0, offline: 0, tickets: 0, thumbsUp: 0, thumbsDown: 0 };
         cols.push(p.chat, p.missed, p.offline, p.tickets, p.thumbsUp, p.thumbsDown);
       }
       lines.push(cols.map(escapeCSV).join(","));
     }
-    downloadCSV(`tawk_hourly_${startDate}_to_${endDate}.csv`, lines.join("\n"));
+    downloadCSV(`tawk_report_${startDate}_to_${endDate}.csv`, lines.join("\n"));
   }
 
   function downloadAgentCSV() {
@@ -260,7 +282,7 @@ export default function Dashboard() {
       <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-[1400px] mx-auto px-6 py-4">
           <h1 className="text-2xl font-bold text-gray-900">Tawk.to Reports</h1>
-          <p className="text-sm text-gray-500 mt-1">Generate hourly chat volume and agent duration reports</p>
+          <p className="text-sm text-gray-500 mt-1">Generate daily chat volume and agent reports</p>
         </div>
       </header>
 
@@ -271,8 +293,8 @@ export default function Dashboard() {
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Report Type</label>
               <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-                <button onClick={() => setTab("hourly")} className={`px-4 py-2 text-sm font-medium transition-colors ${tab === "hourly" ? "bg-gray-900 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>
-                  Hourly Chat Volume
+                <button onClick={() => setTab("report")} className={`px-4 py-2 text-sm font-medium transition-colors ${tab === "report" ? "bg-gray-900 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>
+                  Report
                 </button>
                 <button onClick={() => setTab("agent")} className={`px-4 py-2 text-sm font-medium transition-colors border-l border-gray-300 ${tab === "agent" ? "bg-gray-900 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>
                   Agent Duration
@@ -297,27 +319,27 @@ export default function Dashboard() {
           {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
         </div>
 
-        {/* ─── Hourly Report Table ─── */}
-        {tab === "hourly" && hourlyRows.length > 0 && (() => {
-          const filteredHourly = hideZeroRows
-            ? hourlyRows.filter((r) => r.totalChats > 0 || r.totalTickets > 0 || r.totalOffline > 0 || r.totalMissed > 0)
-            : hourlyRows;
+        {/* ─── Daily Report Table ─── */}
+        {tab === "report" && dailyRows.length > 0 && (() => {
+          const filteredDaily = hideZeroRows
+            ? dailyRows.filter((r) => r.totalChats > 0 || r.totalTickets > 0 || r.totalOffline > 0 || r.totalMissed > 0)
+            : dailyRows;
           return (
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div className="flex items-center gap-4">
                 <h2 className="text-lg font-semibold text-gray-900">
-                  Hourly Chat Volume — {filteredHourly.length} rows
-                  {hideZeroRows && filteredHourly.length < hourlyRows.length && (
-                    <span className="text-sm font-normal text-gray-400 ml-2">({hourlyRows.length - filteredHourly.length} empty hours hidden)</span>
+                  Report — {filteredDaily.length} days
+                  {hideZeroRows && filteredDaily.length < dailyRows.length && (
+                    <span className="text-sm font-normal text-gray-400 ml-2">({dailyRows.length - filteredDaily.length} empty days hidden)</span>
                   )}
                 </h2>
                 <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
                   <input type="checkbox" checked={hideZeroRows} onChange={(e) => setHideZeroRows(e.target.checked)} className="rounded" />
-                  Hide empty hours
+                  Hide empty days
                 </label>
               </div>
-              <button onClick={downloadHourlyCSV} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
+              <button onClick={downloadDailyCSV} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
                 Download CSV
               </button>
             </div>
@@ -326,7 +348,6 @@ export default function Dashboard() {
                 <thead>
                   <tr className="bg-gray-900 text-white">
                     <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Date</th>
-                    <th className="px-3 py-2 text-center font-medium whitespace-nowrap">Time</th>
                     <th className="px-3 py-2 text-center font-medium whitespace-nowrap">Total Chats</th>
                     <th className="px-3 py-2 text-center font-medium whitespace-nowrap">Total Tickets</th>
                     <th className="px-3 py-2 text-center font-medium whitespace-nowrap">Total Offline</th>
@@ -338,7 +359,7 @@ export default function Dashboard() {
                   </tr>
                   {propertyNames.length > 0 && (
                     <tr className="bg-gray-800 text-gray-300 text-xs">
-                      <th colSpan={7}></th>
+                      <th colSpan={6}></th>
                       {propertyNames.map((name) => (
                         <Fragment key={name}>
                           <th className="px-2 py-1 text-center border-l border-gray-700">Chat</th>
@@ -352,10 +373,9 @@ export default function Dashboard() {
                   )}
                 </thead>
                 <tbody>
-                  {filteredHourly.map((row, i) => (
+                  {filteredDaily.map((row, i) => (
                     <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                       <td className="px-3 py-2 whitespace-nowrap">{row.date}</td>
-                      <td className="px-3 py-2 text-center whitespace-nowrap">{row.time}</td>
                       <td className="px-3 py-2 text-center">{row.totalChats}</td>
                       <td className="px-3 py-2 text-center">{row.totalTickets}</td>
                       <td className="px-3 py-2 text-center">{row.totalOffline}</td>
@@ -547,7 +567,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {!loading && hourlyRows.length === 0 && agentSummary.length === 0 && csatRows.length === 0 && (
+        {!loading && dailyRows.length === 0 && agentSummary.length === 0 && csatRows.length === 0 && (
           <div className="text-center py-20 text-gray-400">
             <p className="text-lg">Select a date range and click Generate Report</p>
           </div>
