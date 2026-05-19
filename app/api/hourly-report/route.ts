@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getChats } from "@/lib/tawk-api";
 import { PROPERTIES } from "@/lib/properties";
+import { TZ_OFFSET_MS } from "@/lib/config";
 
 export const maxDuration = 300;
 
@@ -25,10 +26,8 @@ interface PropDayBucket {
   missed: number;
 }
 
-const PH_OFFSET_MS = 8 * 60 * 60 * 1000;
-
 function phDateKey(iso: string): string {
-  return new Date(new Date(iso).getTime() + PH_OFFSET_MS).toISOString().split("T")[0];
+  return new Date(new Date(iso).getTime() + TZ_OFFSET_MS).toISOString().split("T")[0];
 }
 
 function chatDurationSec(c: ChatItem): number | null {
