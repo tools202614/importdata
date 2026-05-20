@@ -88,12 +88,12 @@ export async function GET(req: NextRequest) {
         }
         const b = buckets[key];
 
+        // Total chat volume (every chat counts)
+        b.chats += 1;
+
         const hadAgent = (chat.messages || []).some((m) => m.sender?.t === "a");
 
         if (hadAgent) {
-          // Handled: an agent actually participated in this chat
-          b.chats += 1;
-
           const dur = chatDurationSec(chat);
           if (dur !== null && dur > 0) {
             b.totalDurationSec += dur;
@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
             b.frtCount += 1;
           }
         } else if (!chat.offlineForm) {
-          // Missed: live chat where no agent responded (offline form submissions don't count)
+          // Missed: live chat where no agent responded
           b.missed += 1;
         }
       }
