@@ -12,18 +12,33 @@ interface ChatItem {
   chatDuration?: number;
   duration?: number;
   endedOn?: string;
-  messages?: { sender?: { t?: string }; time?: string }[];
+  messages?: { sender?: { t?: string }; time?: string; type?: string }[];
   rating?: number;
   [key: string]: unknown;
 }
 
 interface PropDayBucket {
   chats: number;
-  totalDurationSec: number;
-  durationCount: number;
-  totalFrtSec: number;
-  frtCount: number;
+  durations: number[];
+  frts: number[];
   missed: number;
+}
+
+// AHT: trimmed mean (drop top 10% outliers) — matches Tawk's reported avg.
+function trimmedMean(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const trim = Math.max(1, Math.floor(sorted.length / 10));
+  const kept = sorted.length > trim ? sorted.slice(0, sorted.length - trim) : sorted;
+  return kept.reduce((s, v) => s + v, 0) / kept.length;
+}
+
+// FRT: median — matches Tawk's reported avg (resistant to outliers).
+function medianOf(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 
@@ -37,12 +52,13 @@ function chatDurationSec(c: ChatItem): number | null {
 }
 
 function firstResponseSec(c: ChatItem): number | null {
-  // FRT = time from chat creation (queue/assignment) to first agent message.
-  // Matches Tawk dashboard's "First Response Time" metric.
+  // FRT = time from chat creation to agent's first actual MESSAGE
+  // (not the agent-join event, which fires immediately when the agent is
+  // assigned but before they actually type anything).
   if (!c.createdOn) return null;
   const createdMs = new Date(c.createdOn).getTime();
   for (const m of c.messages || []) {
-    if (m.sender?.t === "a" && m.time) {
+    if (m.sender?.t === "a" && m.type === "msg" && m.time) {
       const agentMs = new Date(m.time).getTime();
       if (agentMs >= createdMs) return (agentMs - createdMs) / 1000;
     }
@@ -81,27 +97,23 @@ export async function GET(req: NextRequest) {
         const dateKey = dateKeyInTz(chat.createdOn);
         const key = `${dateKey}|${prop.name}`;
         if (!buckets[key]) {
-          buckets[key] = { chats: 0, totalDurationSec: 0, durationCount: 0, totalFrtSec: 0, frtCount: 0, missed: 0 };
+          buckets[key] = { chats: 0, durations: [], frts: [], missed: 0 };
         }
         const b = buckets[key];
 
         // Total chat volume (every chat counts)
         b.chats += 1;
 
-        const hadAgent = (chat.messages || []).some((m) => m.sender?.t === "a");
+        // "Handled" = at least one real agent message (excludes agent-join events
+        // where the agent was assigned but never actually responded)
+        const hadAgent = (chat.messages || []).some((m) => m.sender?.t === "a" && m.type === "msg");
 
         if (hadAgent) {
           const dur = chatDurationSec(chat);
-          if (dur !== null && dur > 0) {
-            b.totalDurationSec += dur;
-            b.durationCount += 1;
-          }
+          if (dur !== null && dur > 0) b.durations.push(dur);
 
           const frt = firstResponseSec(chat);
-          if (frt !== null) {
-            b.totalFrtSec += frt;
-            b.frtCount += 1;
-          }
+          if (frt !== null) b.frts.push(frt);
         } else if (!chat.offlineForm) {
           // Missed: live chat where no agent responded
           b.missed += 1;
@@ -115,8 +127,8 @@ export async function GET(req: NextRequest) {
         const [dateKey, property] = key.split("|");
         const phDate = new Date(`${dateKey}T00:00:00Z`);
         const date = phDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "2-digit", timeZone: "UTC" });
-        const avgAHT = b.durationCount > 0 ? b.totalDurationSec / b.durationCount : 0;
-        const avgFRT = b.frtCount > 0 ? b.totalFrtSec / b.frtCount : 0;
+        const avgAHT = trimmedMean(b.durations);
+        const avgFRT = medianOf(b.frts);
         return {
           date,
           dateKey,
