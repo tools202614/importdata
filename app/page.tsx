@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TZ_OFFSET_HOURS } from "@/lib/config";
+import { localDayUtcRange } from "@/lib/config";
 
 // ─── Types ───────────────────────────────────────────
 interface DailyRow {
@@ -89,22 +89,22 @@ export default function Dashboard() {
   useEffect(() => { setToday(new Date().toISOString().split("T")[0]); }, []);
 
   // Split a date range into daily chunks aligned to the configured timezone.
-  // The user picks a local date like "May 10"; we convert to the UTC range that
-  // covers that full local day so chats near midnight aren't split across rows.
+  // Uses IANA timezone (handles DST automatically) so May 10 in Central Time
+  // maps to the correct UTC window regardless of standard vs daylight time.
   function getDailyChunks(start: string, end: string): { start: string; end: string }[] {
     const chunks: { start: string; end: string }[] = [];
-    const offsetMs = TZ_OFFSET_HOURS * 60 * 60 * 1000;
-    const dayMs = 24 * 60 * 60 * 1000;
-
-    const startUtcMs = Date.parse(`${start}T00:00:00Z`) - offsetMs;
-    const endUtcMs = Date.parse(`${end}T00:00:00Z`) - offsetMs + dayMs - 1000;
-
-    for (let cursorMs = startUtcMs; cursorMs <= endUtcMs; cursorMs += dayMs) {
-      const chunkEndMs = Math.min(cursorMs + dayMs - 1000, endUtcMs);
-      chunks.push({
-        start: new Date(cursorMs).toISOString(),
-        end: new Date(chunkEndMs).toISOString(),
-      });
+    // Iterate by local date string to avoid DST shifts changing day length
+    const startParts = start.split("-").map(Number);
+    const endParts = end.split("-").map(Number);
+    const startDate = new Date(Date.UTC(startParts[0], startParts[1] - 1, startParts[2]));
+    const endDate = new Date(Date.UTC(endParts[0], endParts[1] - 1, endParts[2]));
+    for (let d = new Date(startDate); d <= endDate; d.setUTCDate(d.getUTCDate() + 1)) {
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const day = String(d.getUTCDate()).padStart(2, "0");
+      const localDate = `${y}-${m}-${day}`;
+      const { startUtc, endUtc } = localDayUtcRange(localDate);
+      chunks.push({ start: startUtc.toISOString(), end: endUtc.toISOString() });
     }
     return chunks;
   }

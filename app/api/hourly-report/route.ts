@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getChats } from "@/lib/tawk-api";
 import { PROPERTIES } from "@/lib/properties";
-import { TZ_OFFSET_MS } from "@/lib/config";
+import { dateKeyInTz } from "@/lib/config";
 
 export const maxDuration = 300;
 
@@ -26,9 +26,6 @@ interface PropDayBucket {
   missed: number;
 }
 
-function phDateKey(iso: string): string {
-  return new Date(new Date(iso).getTime() + TZ_OFFSET_MS).toISOString().split("T")[0];
-}
 
 function chatDurationSec(c: ChatItem): number | null {
   if (typeof c.chatDuration === "number") return c.chatDuration;
@@ -81,7 +78,7 @@ export async function GET(req: NextRequest) {
 
       for (const chat of chats) {
         if (!chat.createdOn) continue;
-        const dateKey = phDateKey(chat.createdOn);
+        const dateKey = dateKeyInTz(chat.createdOn);
         const key = `${dateKey}|${prop.name}`;
         if (!buckets[key]) {
           buckets[key] = { chats: 0, totalDurationSec: 0, durationCount: 0, totalFrtSec: 0, frtCount: 0, missed: 0 };

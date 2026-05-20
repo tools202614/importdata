@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getChats } from "@/lib/tawk-api";
 import { PROPERTIES } from "@/lib/properties";
-import { TZ_OFFSET_MS } from "@/lib/config";
+import { dateKeyInTz } from "@/lib/config";
 
 export const maxDuration = 300;
 
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
         if (chat.offlineForm) continue;
         if (!chat.createdOn) continue;
 
-        const dateStr = new Date(new Date(chat.createdOn).getTime() + TZ_OFFSET_MS).toISOString().split("T")[0];
+        const dateStr = dateKeyInTz(chat.createdOn);
         const agent = getAgentName(chat);
         const duration = getChatDuration(chat);
         const rating = chat.rating || 0;
