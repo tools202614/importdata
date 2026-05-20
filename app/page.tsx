@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { TZ_OFFSET_HOURS } from "@/lib/config";
 
 // ─── Types ───────────────────────────────────────────
 interface DailyRow {
@@ -87,18 +88,23 @@ export default function Dashboard() {
   const [today, setToday] = useState("");
   useEffect(() => { setToday(new Date().toISOString().split("T")[0]); }, []);
 
-  // Split a date range into daily chunks — Tawk API pagination is broken
-  // (returns same data on every page), so we must keep each chunk small
-  // enough that all chats fit in a single page (~200-500 per property per day).
+  // Split a date range into daily chunks aligned to the configured timezone.
+  // The user picks a local date like "May 10"; we convert to the UTC range that
+  // covers that full local day so chats near midnight aren't split across rows.
   function getDailyChunks(start: string, end: string): { start: string; end: string }[] {
     const chunks: { start: string; end: string }[] = [];
-    const endDate = new Date(end);
-    let cursor = new Date(start);
+    const offsetMs = TZ_OFFSET_HOURS * 60 * 60 * 1000;
+    const dayMs = 24 * 60 * 60 * 1000;
 
-    while (cursor <= endDate) {
-      const day = cursor.toISOString().split("T")[0];
-      chunks.push({ start: `${day}T00:00:00Z`, end: `${day}T23:59:59Z` });
-      cursor.setDate(cursor.getDate() + 1);
+    const startUtcMs = Date.parse(`${start}T00:00:00Z`) - offsetMs;
+    const endUtcMs = Date.parse(`${end}T00:00:00Z`) - offsetMs + dayMs - 1000;
+
+    for (let cursorMs = startUtcMs; cursorMs <= endUtcMs; cursorMs += dayMs) {
+      const chunkEndMs = Math.min(cursorMs + dayMs - 1000, endUtcMs);
+      chunks.push({
+        start: new Date(cursorMs).toISOString(),
+        end: new Date(chunkEndMs).toISOString(),
+      });
     }
     return chunks;
   }
