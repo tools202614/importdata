@@ -88,6 +88,37 @@ export default function Dashboard() {
   const [today, setToday] = useState("");
   useEffect(() => { setToday(new Date().toISOString().split("T")[0]); }, []);
 
+  // Set start/end to Monday-Saturday of the current week (in report timezone)
+  function setThisWeek() {
+    const now = new Date();
+    // Get local date parts (in browser tz; for report tz we'd need Intl, but
+    // close enough since user picks dates in their own day)
+    const day = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    const daysSinceMonday = (day + 6) % 7; // Mon=0, ..., Sun=6
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - daysSinceMonday);
+    const saturday = new Date(monday);
+    saturday.setDate(monday.getDate() + 5);
+    const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    setStartDate(fmt(monday));
+    // Cap end at today if Saturday is in the future
+    const todayDate = new Date();
+    setEndDate(saturday > todayDate ? fmt(todayDate) : fmt(saturday));
+  }
+
+  function setLastWeek() {
+    const now = new Date();
+    const day = now.getDay();
+    const daysSinceMonday = (day + 6) % 7;
+    const lastMonday = new Date(now);
+    lastMonday.setDate(now.getDate() - daysSinceMonday - 7);
+    const lastSaturday = new Date(lastMonday);
+    lastSaturday.setDate(lastMonday.getDate() + 5);
+    const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    setStartDate(fmt(lastMonday));
+    setEndDate(fmt(lastSaturday));
+  }
+
   // Split a date range into daily chunks aligned to the configured timezone.
   // Uses IANA timezone (handles DST automatically) so May 10 in Central Time
   // maps to the correct UTC window regardless of standard vs daylight time.
@@ -274,6 +305,17 @@ export default function Dashboard() {
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">End Date</label>
               <input type="date" value={endDate} max={today || undefined} onChange={(e) => setEndDate(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Quick Pick</label>
+              <div className="flex gap-2">
+                <button onClick={setThisWeek} type="button" className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors whitespace-nowrap">
+                  This Week (Mon-Sat)
+                </button>
+                <button onClick={setLastWeek} type="button" className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors whitespace-nowrap">
+                  Last Week
+                </button>
+              </div>
             </div>
             <button onClick={fetchReport} disabled={loading} className="bg-gray-900 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
               {loading ? `Fetching... ${elapsed}s${progress ? ` (${progress})` : ""}` : "Generate Report"}
