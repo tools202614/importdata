@@ -30,31 +30,68 @@ async function throttledFetch(url: string, body: Record<string, unknown>): Promi
   if (wait > 0) await sleep(wait);
   lastRequestTime = Date.now();
 
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: getHeaders(),
-      body: JSON.stringify(body),
-    });
+  let lastError: unknown = null;
 
-    if (res.status === 429) {
-      const waitTime = 3000 * (attempt + 1);
-      console.log(`Rate limited, retrying in ${waitTime / 1000}s...`);
-      await sleep(waitTime);
-      lastRequestTime = Date.now();
-      continue;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout per request
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (res.status === 429) {
+        const waitTime = 3000 * (attempt + 1);
+        console.log(`Rate limited, retrying in ${waitTime / 1000}s...`);
+        await sleep(waitTime);
+        lastRequestTime = Date.now();
+        continue;
+      }
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Tawk API error ${res.status}: ${text}`);
+      }
+
+      const json = await res.json();
+      return json.data || [];
+    } catch (err) {
+      lastError = err;
+      const name = err instanceof Error ? err.name : "";
+      const msg = err instanceof Error ? err.message : String(err);
+      const cause = (err as { cause?: unknown } | null)?.cause;
+      const causeMsg = cause instanceof Error ? cause.message : cause ? String(cause) : "";
+
+      // Network-level errors (DNS, TLS, ECONNRESET, timeout): retry with backoff
+      const isNetworkErr = name === "AbortError" ||
+        msg.includes("fetch failed") ||
+        msg.includes("ECONN") ||
+        msg.includes("ETIMEDOUT") ||
+        msg.includes("ENOTFOUND") ||
+        msg.includes("network") ||
+        causeMsg.includes("ECONN") ||
+        causeMsg.includes("ETIMEDOUT");
+
+      if (isNetworkErr && attempt < 4) {
+        const waitTime = 2000 * (attempt + 1);
+        console.log(`Network error (${msg}${causeMsg ? ` / ${causeMsg}` : ""}), retrying in ${waitTime / 1000}s...`);
+        await sleep(waitTime);
+        lastRequestTime = Date.now();
+        continue;
+      }
+
+      // Not a network error, or out of retries — rethrow with richer detail
+      if (causeMsg) throw new Error(`${msg} (cause: ${causeMsg})`);
+      throw err;
     }
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Tawk API error ${res.status}: ${text}`);
-    }
-
-    const json = await res.json();
-    return json.data || [];
   }
 
-  throw new Error("Tawk API: max retries exceeded (rate limited)");
+  throw new Error(`Tawk API: max retries exceeded. Last error: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
 }
 
 async function fetchAllPages(
