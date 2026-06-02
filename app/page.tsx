@@ -22,6 +22,22 @@ function formatHour(h: number): string {
   return `${h12}:00 ${ampm}`;
 }
 
+interface TicketRow {
+  dateKey: string;
+  createdOn: string;
+  property: string;
+  ticketId: number | null;
+  channelUser: string;
+  subject: string;
+  status: string;
+  priority: string;
+  source: string;
+  assignee: string;
+  tag1: string;
+  tag2: string;
+  allTags: string[];
+}
+
 interface AgentSummaryRow {
   date: string; agent: string; duration: string; chatCount: number;
   thumbsUp: number; thumbsDown: number;
@@ -75,7 +91,7 @@ function escapeCSV(val: string | number) {
 
 // ─── Component ───────────────────────────────────────
 export default function Dashboard() {
-  const [tab, setTab] = useState<"report" | "agent" | "csat">("report");
+  const [tab, setTab] = useState<"report" | "agent" | "csat" | "tickets">("report");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [loading, setLoading] = useState(false);
@@ -93,6 +109,7 @@ export default function Dashboard() {
 
   // CSAT report state
   const [csatRows, setCsatRows] = useState<{ agent: string; positive: number; negative: number; neutral: number }[]>([]);
+  const [ticketRows, setTicketRows] = useState<TicketRow[]>([]);
 
   const [today, setToday] = useState("");
   useEffect(() => { setToday(new Date().toISOString().split("T")[0]); }, []);
@@ -211,7 +228,7 @@ export default function Dashboard() {
           thumbsUp: totalUp,
           thumbsDown: totalDown,
         });
-      } else {
+      } else if (tab === "csat") {
         // CSAT report
         const ratingMap: Record<string, { positive: number; negative: number; chats: number }> = {};
         for (let i = 0; i < chunks.length; i++) {
@@ -230,6 +247,25 @@ export default function Dashboard() {
           .map(([agent, r]) => ({ agent, positive: r.positive, negative: r.negative, neutral: r.chats - r.positive - r.negative }))
           .sort((a, b) => b.positive - a.positive);
         setCsatRows(rows);
+      } else {
+        // Tickets report
+        let all: TicketRow[] = [];
+        for (let i = 0; i < chunks.length; i++) {
+          setProgress(`Day ${i + 1} of ${chunks.length}`);
+          const res = await fetch(`/api/tickets?startDate=${chunks[i].start}&endDate=${chunks[i].end}`);
+          if (!res.ok) throw new Error(await res.text());
+          const data = await res.json();
+          all = all.concat(data.rows);
+        }
+        // Dedup by ticket createdOn+subject (tickets shouldn't dup, but safety)
+        const seen = new Set<string>();
+        const dedup: TicketRow[] = [];
+        for (const t of all) {
+          const k = `${t.createdOn}|${t.subject}|${t.channelUser}`;
+          if (!seen.has(k)) { seen.add(k); dedup.push(t); }
+        }
+        dedup.sort((a, b) => b.createdOn.localeCompare(a.createdOn));
+        setTicketRows(dedup);
       }
     } catch (err) {
       setError(String(err));
@@ -267,6 +303,15 @@ export default function Dashboard() {
     }
   }
 
+  function downloadTicketsCSV() {
+    const lines = [["Date", "Property", "Channel User", "Subject", "Status", "Priority", "Source", "Assignee", "Tag 1", "Tag 2"].map(escapeCSV).join(",")];
+    for (const t of ticketRows) {
+      const date = new Date(t.createdOn).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "2-digit" });
+      lines.push([date, escapeCSV(t.property), escapeCSV(t.channelUser), escapeCSV(t.subject), escapeCSV(t.status), escapeCSV(t.priority), escapeCSV(t.source), escapeCSV(t.assignee), escapeCSV(t.tag1), escapeCSV(t.tag2)].join(","));
+    }
+    downloadCSV(`tickets_${startDate}_to_${endDate}.csv`, lines.join("\n"));
+  }
+
   function downloadCsatCSV() {
     const lines = [["Agent Name", "Positive Ratings", "Negative Ratings", "Neutral"].join(",")];
     for (const row of csatRows) {
@@ -301,6 +346,9 @@ export default function Dashboard() {
                 </button>
                 <button onClick={() => setTab("agent")} className={`px-4 py-2 text-sm font-medium transition-colors border-l border-gray-300 ${tab === "agent" ? "bg-gray-900 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>
                   Agent Duration
+                </button>
+                <button onClick={() => setTab("tickets")} className={`px-4 py-2 text-sm font-medium transition-colors border-l border-gray-300 ${tab === "tickets" ? "bg-gray-900 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>
+                  Tickets
                 </button>
                 <button onClick={() => setTab("csat")} className={`px-4 py-2 text-sm font-medium transition-colors border-l border-gray-300 ${tab === "csat" ? "bg-gray-900 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>
                   Agent Ratings
@@ -595,7 +643,68 @@ export default function Dashboard() {
           </div>
         )}
 
-        {!loading && dailyRows.length === 0 && agentSummary.length === 0 && csatRows.length === 0 && (
+        {/* ─── Tickets Report ─── */}
+        {tab === "tickets" && ticketRows.length > 0 && (
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Tickets — {ticketRows.length} rows</h2>
+              <button onClick={downloadTicketsCSV} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
+                Download CSV
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-900 text-white">
+                    <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Date</th>
+                    <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Property</th>
+                    <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Channel User</th>
+                    <th className="px-3 py-2 text-left font-medium">Subject</th>
+                    <th className="px-3 py-2 text-center font-medium whitespace-nowrap">Status</th>
+                    <th className="px-3 py-2 text-center font-medium whitespace-nowrap">Priority</th>
+                    <th className="px-3 py-2 text-center font-medium whitespace-nowrap">Source</th>
+                    <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Assignee</th>
+                    <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Tag 1</th>
+                    <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Tag 2</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ticketRows.map((t, i) => {
+                    const date = new Date(t.createdOn).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "2-digit" });
+                    const statusColor =
+                      t.status === "closed" ? "text-gray-500" :
+                      t.status === "open" ? "text-blue-600 font-semibold" :
+                      t.status === "awaiting" ? "text-orange-600 font-semibold" : "text-gray-700";
+                    const priorityColor =
+                      t.priority === "high" ? "text-red-600 font-semibold" :
+                      t.priority === "medium" ? "text-yellow-600" :
+                      t.priority === "low" ? "text-gray-500" : "text-gray-700";
+                    return (
+                      <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                        <td className="px-3 py-2 whitespace-nowrap">{date}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{t.property}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{t.channelUser || <span className="text-gray-300">—</span>}</td>
+                        <td className="px-3 py-2 max-w-md truncate" title={t.subject}>{t.subject}</td>
+                        <td className={`px-3 py-2 text-center whitespace-nowrap ${statusColor}`}>{t.status}</td>
+                        <td className={`px-3 py-2 text-center whitespace-nowrap ${priorityColor}`}>{t.priority}</td>
+                        <td className="px-3 py-2 text-center whitespace-nowrap text-gray-600">{t.source}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{t.assignee || <span className="text-gray-300">—</span>}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {t.tag1 ? <span className="inline-block bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs">{t.tag1}</span> : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {t.tag2 ? <span className="inline-block bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs">{t.tag2}</span> : <span className="text-gray-300">—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {!loading && dailyRows.length === 0 && agentSummary.length === 0 && csatRows.length === 0 && ticketRows.length === 0 && (
           <div className="text-center py-20 text-gray-400">
             <p className="text-lg">Select a date range and click Generate Report</p>
           </div>
