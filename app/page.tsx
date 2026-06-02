@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { localDayUtcRange } from "@/lib/config";
 
 // ─── Types ───────────────────────────────────────────
@@ -9,9 +9,17 @@ interface DailyRow {
   dateKey: string;
   property: string;
   totalChats: number;
+  totalTickets: number;
   avgAHT: string;
   avgFRT: string;
   missedChats: number;
+  hourly: { chats: number; tickets: number }[];
+}
+
+function formatHour(h: number): string {
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return `${h12}:00 ${ampm}`;
 }
 
 interface AgentSummaryRow {
@@ -76,6 +84,7 @@ export default function Dashboard() {
 
   const [dailyRows, setDailyRows] = useState<DailyRow[]>([]);
   const [hideZeroRows, setHideZeroRows] = useState(true);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   const [agentSummary, setAgentSummary] = useState<AgentSummaryRow[]>([]);
   const [agentDetail, setAgentDetail] = useState<AgentDetailRow[]>([]);
@@ -233,9 +242,9 @@ export default function Dashboard() {
 
   // ─── CSV Downloads ──────────────────────────────────
   function downloadDailyCSV() {
-    const lines = [["Date", "Property", "Total Chats Handled", "Average AHT", "Average FRT", "Missed Chats"].map(escapeCSV).join(",")];
+    const lines = [["Date", "Property", "Total Chats Handled", "Total Tickets", "Average AHT", "Average FRT", "Missed Chats"].map(escapeCSV).join(",")];
     for (const row of dailyRows) {
-      lines.push([row.date, escapeCSV(row.property), row.totalChats, row.avgAHT, row.avgFRT, row.missedChats].join(","));
+      lines.push([row.date, escapeCSV(row.property), row.totalChats, row.totalTickets, row.avgAHT, row.avgFRT, row.missedChats].join(","));
     }
     downloadCSV(`tawk_report_${startDate}_to_${endDate}.csv`, lines.join("\n"));
   }
@@ -327,7 +336,7 @@ export default function Dashboard() {
         {/* ─── Daily Report Table ─── */}
         {tab === "report" && dailyRows.length > 0 && (() => {
           const filteredDaily = hideZeroRows
-            ? dailyRows.filter((r) => r.totalChats > 0 || r.missedChats > 0)
+            ? dailyRows.filter((r) => r.totalChats > 0 || r.missedChats > 0 || r.totalTickets > 0)
             : dailyRows;
           return (
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
@@ -343,6 +352,7 @@ export default function Dashboard() {
                   <input type="checkbox" checked={hideZeroRows} onChange={(e) => setHideZeroRows(e.target.checked)} className="rounded" />
                   Hide empty rows
                 </label>
+                <span className="text-xs text-gray-400 italic">Click a row to see hourly breakdown</span>
               </div>
               <button onClick={downloadDailyCSV} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
                 Download CSV
@@ -355,22 +365,68 @@ export default function Dashboard() {
                     <th className="px-4 py-2 text-left font-medium whitespace-nowrap">Date</th>
                     <th className="px-4 py-2 text-left font-medium whitespace-nowrap">Property</th>
                     <th className="px-4 py-2 text-center font-medium whitespace-nowrap">Total Chats Handled</th>
+                    <th className="px-4 py-2 text-center font-medium whitespace-nowrap">Total Tickets</th>
                     <th className="px-4 py-2 text-center font-medium whitespace-nowrap">Average AHT</th>
                     <th className="px-4 py-2 text-center font-medium whitespace-nowrap">Average FRT</th>
                     <th className="px-4 py-2 text-center font-medium whitespace-nowrap">Missed Chats</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredDaily.map((row, i) => (
-                    <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                      <td className="px-4 py-2 whitespace-nowrap">{row.date}</td>
-                      <td className="px-4 py-2 whitespace-nowrap">{row.property}</td>
-                      <td className="px-4 py-2 text-center">{row.totalChats}</td>
-                      <td className="px-4 py-2 text-center font-mono">{row.avgAHT}</td>
-                      <td className="px-4 py-2 text-center font-mono">{row.avgFRT}</td>
-                      <td className="px-4 py-2 text-center">{row.missedChats}</td>
-                    </tr>
-                  ))}
+                  {filteredDaily.map((row, i) => {
+                    const rowKey = `${row.dateKey}|${row.property}`;
+                    const isExpanded = expandedKey === rowKey;
+                    return (
+                      <Fragment key={rowKey}>
+                        <tr
+                          onClick={() => setExpandedKey(isExpanded ? null : rowKey)}
+                          className={`cursor-pointer hover:bg-blue-50 ${i % 2 === 0 ? "bg-white" : "bg-gray-50"} ${isExpanded ? "bg-blue-50" : ""}`}
+                        >
+                          <td className="px-4 py-2 whitespace-nowrap">
+                            <span className="inline-block w-4 text-gray-400">{isExpanded ? "▼" : "▶"}</span> {row.date}
+                          </td>
+                          <td className="px-4 py-2 whitespace-nowrap">{row.property}</td>
+                          <td className="px-4 py-2 text-center">{row.totalChats}</td>
+                          <td className="px-4 py-2 text-center">{row.totalTickets}</td>
+                          <td className="px-4 py-2 text-center font-mono">{row.avgAHT}</td>
+                          <td className="px-4 py-2 text-center font-mono">{row.avgFRT}</td>
+                          <td className="px-4 py-2 text-center">{row.missedChats}</td>
+                        </tr>
+                        {isExpanded && (
+                          <tr className="bg-blue-50/50">
+                            <td colSpan={7} className="px-8 py-4">
+                              <div className="text-xs font-semibold text-gray-600 mb-2">Hourly breakdown — {row.date} · {row.property}</div>
+                              <div className="overflow-x-auto">
+                                <table className="text-xs border border-gray-200">
+                                  <thead>
+                                    <tr className="bg-gray-100">
+                                      <th className="px-3 py-1 text-left font-medium">Hour</th>
+                                      {Array.from({ length: 24 }, (_, h) => (
+                                        <th key={h} className="px-2 py-1 text-center font-medium font-mono whitespace-nowrap">{formatHour(h)}</th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    <tr>
+                                      <td className="px-3 py-1 font-medium text-gray-700">Chats</td>
+                                      {row.hourly.map((h, idx) => (
+                                        <td key={idx} className={`px-2 py-1 text-center font-mono ${h.chats > 0 ? "text-gray-900" : "text-gray-300"}`}>{h.chats}</td>
+                                      ))}
+                                    </tr>
+                                    <tr className="bg-white">
+                                      <td className="px-3 py-1 font-medium text-gray-700">Tickets</td>
+                                      {row.hourly.map((h, idx) => (
+                                        <td key={idx} className={`px-2 py-1 text-center font-mono ${h.tickets > 0 ? "text-gray-900" : "text-gray-300"}`}>{h.tickets}</td>
+                                      ))}
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

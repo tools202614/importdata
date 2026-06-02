@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getChats } from "@/lib/tawk-api";
+import { getChats, getTickets } from "@/lib/tawk-api";
 import { PROPERTIES } from "@/lib/properties";
-import { dateKeyInTz } from "@/lib/config";
+import { dateKeyInTz, hourInTz } from "@/lib/config";
 
 export const maxDuration = 300;
 
@@ -17,11 +17,24 @@ interface ChatItem {
   [key: string]: unknown;
 }
 
+interface TicketItem {
+  createdOn?: string;
+  [key: string]: unknown;
+}
+
+interface HourBucket { chats: number; tickets: number }
+
 interface PropDayBucket {
   chats: number;
+  tickets: number;
   durations: number[];
   frts: number[];
   missed: number;
+  hourly: HourBucket[];
+}
+
+function emptyHourly(): HourBucket[] {
+  return Array.from({ length: 24 }, () => ({ chats: 0, tickets: 0 }));
 }
 
 // AHT: trimmed mean (drop top 10% outliers) — matches Tawk's reported avg.
@@ -41,7 +54,6 @@ function medianOf(values: number[]): number {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-
 function chatDurationSec(c: ChatItem): number | null {
   if (typeof c.chatDuration === "number") return c.chatDuration;
   if (typeof c.duration === "number") return c.duration;
@@ -52,9 +64,6 @@ function chatDurationSec(c: ChatItem): number | null {
 }
 
 function firstResponseSec(c: ChatItem): number | null {
-  // FRT = time from chat creation to agent's first actual MESSAGE
-  // (not the agent-join event, which fires immediately when the agent is
-  // assigned but before they actually type anything).
   if (!c.createdOn) return null;
   const createdMs = new Date(c.createdOn).getTime();
   for (const m of c.messages || []) {
@@ -76,6 +85,13 @@ function formatMS(seconds: number): string {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
+function ensureBucket(buckets: Record<string, PropDayBucket>, key: string): PropDayBucket {
+  if (!buckets[key]) {
+    buckets[key] = { chats: 0, tickets: 0, durations: [], frts: [], missed: 0, hourly: emptyHourly() };
+  }
+  return buckets[key];
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const startDate = searchParams.get("startDate");
@@ -86,38 +102,41 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // key = `${dateKey}|${propertyName}`
     const buckets: Record<string, PropDayBucket> = {};
 
     for (const prop of PROPERTIES) {
-      const chats = (await getChats(prop.id, startDate, endDate)) as ChatItem[];
+      const [chats, tickets] = await Promise.all([
+        getChats(prop.id, startDate, endDate) as Promise<ChatItem[]>,
+        getTickets(prop.id, startDate, endDate) as Promise<TicketItem[]>,
+      ]);
 
       for (const chat of chats) {
         if (!chat.createdOn) continue;
         const dateKey = dateKeyInTz(chat.createdOn);
-        const key = `${dateKey}|${prop.name}`;
-        if (!buckets[key]) {
-          buckets[key] = { chats: 0, durations: [], frts: [], missed: 0 };
-        }
-        const b = buckets[key];
+        const hour = hourInTz(chat.createdOn);
+        const b = ensureBucket(buckets, `${dateKey}|${prop.name}`);
 
-        // Total chat volume (every chat counts)
         b.chats += 1;
+        b.hourly[hour].chats += 1;
 
-        // "Handled" = at least one real agent message (excludes agent-join events
-        // where the agent was assigned but never actually responded)
         const hadAgent = (chat.messages || []).some((m) => m.sender?.t === "a" && m.type === "msg");
-
         if (hadAgent) {
           const dur = chatDurationSec(chat);
           if (dur !== null && dur > 0) b.durations.push(dur);
-
           const frt = firstResponseSec(chat);
           if (frt !== null) b.frts.push(frt);
         } else if (!chat.offlineForm) {
-          // Missed: live chat where no agent responded
           b.missed += 1;
         }
+      }
+
+      for (const ticket of tickets) {
+        if (!ticket.createdOn) continue;
+        const dateKey = dateKeyInTz(ticket.createdOn);
+        const hour = hourInTz(ticket.createdOn);
+        const b = ensureBucket(buckets, `${dateKey}|${prop.name}`);
+        b.tickets += 1;
+        b.hourly[hour].tickets += 1;
       }
     }
 
@@ -125,18 +144,18 @@ export async function GET(req: NextRequest) {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, b]) => {
         const [dateKey, property] = key.split("|");
-        const phDate = new Date(`${dateKey}T00:00:00Z`);
-        const date = phDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "2-digit", timeZone: "UTC" });
-        const avgAHT = trimmedMean(b.durations);
-        const avgFRT = medianOf(b.frts);
+        const dateObj = new Date(`${dateKey}T00:00:00Z`);
+        const date = dateObj.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "2-digit", timeZone: "UTC" });
         return {
           date,
           dateKey,
           property,
           totalChats: b.chats,
-          avgAHT: formatMS(avgAHT),
-          avgFRT: formatMS(avgFRT),
+          totalTickets: b.tickets,
+          avgAHT: formatMS(trimmedMean(b.durations)),
+          avgFRT: formatMS(medianOf(b.frts)),
           missedChats: b.missed,
+          hourly: b.hourly,
         };
       });
 

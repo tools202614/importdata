@@ -19,6 +19,23 @@ export function dateKeyInTz(iso: string | Date): string {
   }).format(d);
 }
 
+// Returns the local hour (0-23) for an instant in the configured timezone.
+export function hourInTz(iso: string | Date): number {
+  const d = typeof iso === "string" ? new Date(iso) : iso;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: REPORT_TIMEZONE,
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  for (const p of parts) {
+    if (p.type === "hour") {
+      const h = parseInt(p.value, 10);
+      return h === 24 ? 0 : h;
+    }
+  }
+  return 0;
+}
+
 // Returns the UTC instants for [local midnight, local 23:59:59.999] of a given YYYY-MM-DD.
 export function localDayUtcRange(localDate: string): { startUtc: Date; endUtc: Date } {
   // Compute the timezone offset for this specific date (handles DST automatically)
