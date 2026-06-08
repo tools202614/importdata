@@ -2,6 +2,8 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { localDayUtcRange } from "@/lib/config";
+import { isDriverTag, driverLabel, UNTAGGED } from "@/lib/drivers";
+import EscalationsPanel from "./_components/EscalationsPanel";
 
 // ─── Types ───────────────────────────────────────────
 interface DailyRow {
@@ -36,6 +38,14 @@ interface TicketRow {
   tag1: string;
   tag2: string;
   allTags: string[];
+}
+
+interface DriverApiRow {
+  property: string; tag: string; chats: number; tickets: number;
+}
+
+interface AttributeRow {
+  property: string; object: string; key: string; label: string; dataType: string;
 }
 
 interface AgentSummaryRow {
@@ -91,7 +101,7 @@ function escapeCSV(val: string | number) {
 
 // ─── Component ───────────────────────────────────────
 export default function Dashboard() {
-  const [tab, setTab] = useState<"report" | "agent" | "csat" | "tickets">("report");
+  const [tab, setTab] = useState<"report" | "agent" | "csat" | "tickets" | "drivers" | "escalations">("report");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [loading, setLoading] = useState(false);
@@ -110,6 +120,17 @@ export default function Dashboard() {
   // CSAT report state
   const [csatRows, setCsatRows] = useState<{ agent: string; positive: number; negative: number; neutral: number }[]>([]);
   const [ticketRows, setTicketRows] = useState<TicketRow[]>([]);
+
+  // Drivers report state
+  const [driverRows, setDriverRows] = useState<DriverApiRow[]>([]);
+  // Default to "all" tags: this team tags conversations with plain semantic
+  // labels (Activation, renewal, …) rather than a `driver:` prefix, so all tags
+  // ARE the drivers. "driver" mode is kept for teams that adopt the prefix.
+  const [driverMode, setDriverMode] = useState<"driver" | "all">("all");
+  const [driverProperty, setDriverProperty] = useState("");
+  // Custom attributes reference (loaded on demand, no date range)
+  const [attrRows, setAttrRows] = useState<AttributeRow[]>([]);
+  const [attrLoading, setAttrLoading] = useState(false);
 
   const [today, setToday] = useState("");
   useEffect(() => { setToday(new Date().toISOString().split("T")[0]); }, []);
@@ -247,7 +268,7 @@ export default function Dashboard() {
           .map(([agent, r]) => ({ agent, positive: r.positive, negative: r.negative, neutral: r.chats - r.positive - r.negative }))
           .sort((a, b) => b.positive - a.positive);
         setCsatRows(rows);
-      } else {
+      } else if (tab === "tickets") {
         // Tickets report
         let all: TicketRow[] = [];
         for (let i = 0; i < chunks.length; i++) {
@@ -266,6 +287,26 @@ export default function Dashboard() {
         }
         dedup.sort((a, b) => b.createdOn.localeCompare(a.createdOn));
         setTicketRows(dedup);
+      } else if (tab === "drivers") {
+        // Drivers report — tag-based, chats + tickets, merged across day chunks
+        const merged = new Map<string, DriverApiRow>();
+        for (let i = 0; i < chunks.length; i++) {
+          setProgress(`Day ${i + 1} of ${chunks.length}`);
+          const res = await fetch(`/api/drivers?startDate=${chunks[i].start}&endDate=${chunks[i].end}`);
+          if (!res.ok) throw new Error(await res.text());
+          const data = await res.json();
+          for (const row of data.rows as DriverApiRow[]) {
+            const key = `${row.property}||${row.tag}`;
+            const existing = merged.get(key);
+            if (existing) {
+              existing.chats += row.chats;
+              existing.tickets += row.tickets;
+            } else {
+              merged.set(key, { ...row });
+            }
+          }
+        }
+        setDriverRows(Array.from(merged.values()));
       }
     } catch (err) {
       setError(String(err));
@@ -324,6 +365,43 @@ export default function Dashboard() {
     downloadCSV(`agent_ratings_${startDate}_to_${endDate}.csv`, lines.join("\n"));
   }
 
+  // ─── Drivers: aggregate into display rows ───────────
+  function aggregatedDrivers() {
+    const scoped = driverProperty ? driverRows.filter((r) => r.property === driverProperty) : driverRows;
+    const map = new Map<string, { driver: string; chats: number; tickets: number }>();
+    for (const r of scoped) {
+      if (driverMode === "driver" && !isDriverTag(r.tag)) continue;
+      const label = driverMode === "driver" ? driverLabel(r.tag) : r.tag;
+      const ex = map.get(label) || { driver: label, chats: 0, tickets: 0 };
+      ex.chats += r.chats;
+      ex.tickets += r.tickets;
+      map.set(label, ex);
+    }
+    return Array.from(map.values()).sort((a, b) => b.chats + b.tickets - (a.chats + a.tickets));
+  }
+
+  function downloadDriversCSV() {
+    const rows = aggregatedDrivers();
+    const lines = [["Driver", "Chats", "Tickets", "Total"].join(",")];
+    for (const r of rows) lines.push([escapeCSV(r.driver), r.chats, r.tickets, r.chats + r.tickets].join(","));
+    downloadCSV(`drivers_${startDate}_to_${endDate}.csv`, lines.join("\n"));
+  }
+
+  async function loadAttributes() {
+    setAttrLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/attributes");
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setAttrRows(data.rows);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setAttrLoading(false);
+    }
+  }
+
   // ─── Render ─────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50">
@@ -353,30 +431,43 @@ export default function Dashboard() {
                 <button onClick={() => setTab("csat")} className={`px-4 py-2 text-sm font-medium transition-colors border-l border-gray-300 ${tab === "csat" ? "bg-gray-900 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>
                   Agent Ratings
                 </button>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Start Date</label>
-              <input type="date" value={startDate} max={today || undefined} onChange={(e) => setStartDate(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">End Date</label>
-              <input type="date" value={endDate} max={today || undefined} onChange={(e) => setEndDate(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Quick Pick</label>
-              <div className="flex gap-2">
-                <button onClick={setThisWeek} type="button" className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors whitespace-nowrap">
-                  This Week (Mon-Sat)
+                <button onClick={() => setTab("drivers")} className={`px-4 py-2 text-sm font-medium transition-colors border-l border-gray-300 ${tab === "drivers" ? "bg-gray-900 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>
+                  Drivers
                 </button>
-                <button onClick={setLastWeek} type="button" className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors whitespace-nowrap">
-                  Last Week
+                <button onClick={() => setTab("escalations")} className={`px-4 py-2 text-sm font-medium transition-colors border-l border-gray-300 ${tab === "escalations" ? "bg-gray-900 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>
+                  Escalations
                 </button>
               </div>
             </div>
-            <button onClick={fetchReport} disabled={loading} className="bg-gray-900 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-              {loading ? `Fetching... ${elapsed}s${progress ? ` (${progress})` : ""}` : "Generate Report"}
-            </button>
+            {tab !== "escalations" && (
+              <>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Start Date</label>
+                  <input type="date" value={startDate} max={today || undefined} onChange={(e) => setStartDate(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">End Date</label>
+                  <input type="date" value={endDate} max={today || undefined} onChange={(e) => setEndDate(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Quick Pick</label>
+                  <div className="flex gap-2">
+                    <button onClick={setThisWeek} type="button" className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors whitespace-nowrap">
+                      This Week (Mon-Sat)
+                    </button>
+                    <button onClick={setLastWeek} type="button" className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors whitespace-nowrap">
+                      Last Week
+                    </button>
+                  </div>
+                </div>
+                <button onClick={fetchReport} disabled={loading} className="bg-gray-900 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                  {loading ? `Fetching... ${elapsed}s${progress ? ` (${progress})` : ""}` : "Generate Report"}
+                </button>
+              </>
+            )}
+            {tab === "escalations" && (
+              <p className="text-sm text-gray-500 pb-2">Log and track support escalations — refunds, chargebacks, channel &amp; VOD issues.</p>
+            )}
           </div>
           {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
         </div>
@@ -704,7 +795,130 @@ export default function Dashboard() {
           </div>
         )}
 
-        {!loading && dailyRows.length === 0 && agentSummary.length === 0 && csatRows.length === 0 && ticketRows.length === 0 && (
+        {/* ─── Drivers Report ─── */}
+        {tab === "drivers" && (() => {
+          const rows = aggregatedDrivers();
+          const totalChats = rows.reduce((s, r) => s + r.chats, 0);
+          const totalTickets = rows.reduce((s, r) => s + r.tickets, 0);
+          const driverProps = Array.from(new Set(driverRows.map((r) => r.property))).sort();
+          return (
+            <div className="space-y-6">
+              {driverRows.length > 0 && (
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-gray-200">
+                    <div className="flex flex-wrap items-center gap-4">
+                      <h2 className="text-lg font-semibold text-gray-900">Drivers — {rows.length}</h2>
+                      <div className="flex rounded-lg border border-gray-300 overflow-hidden text-sm">
+                        <button onClick={() => setDriverMode("driver")} className={`px-3 py-1 font-medium ${driverMode === "driver" ? "bg-gray-900 text-white" : "bg-white text-gray-700"}`}>
+                          Driver tags
+                        </button>
+                        <button onClick={() => setDriverMode("all")} className={`px-3 py-1 font-medium border-l border-gray-300 ${driverMode === "all" ? "bg-gray-900 text-white" : "bg-white text-gray-700"}`}>
+                          All tags
+                        </button>
+                      </div>
+                      <select value={driverProperty} onChange={(e) => setDriverProperty(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
+                        <option value="">All properties</option>
+                        {driverProps.map((p) => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </div>
+                    <button onClick={downloadDriversCSV} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
+                      Download CSV
+                    </button>
+                  </div>
+                  {driverMode === "driver" && (
+                    <p className="px-6 py-2 text-xs text-gray-500 bg-gray-50 border-b border-gray-100">
+                      Showing conversations tagged <code className="bg-gray-200 px-1 rounded">driver:&lt;name&gt;</code> in tawk.to. Switch to <strong>All tags</strong> to see every tag.
+                    </p>
+                  )}
+                  <div className="overflow-x-auto">
+                    {rows.length === 0 ? (
+                      <div className="text-center py-12 text-gray-400">
+                        No {driverMode === "driver" ? <code>driver:</code> : ""} tags found in this range.
+                      </div>
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-gray-900 text-white">
+                            <th className="px-4 py-2 text-left font-medium">Driver{driverMode === "all" ? " / Tag" : ""}</th>
+                            <th className="px-4 py-2 text-center font-medium">Chats</th>
+                            <th className="px-4 py-2 text-center font-medium">Tickets</th>
+                            <th className="px-4 py-2 text-center font-medium">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((r, i) => (
+                            <tr key={r.driver} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                              <td className="px-4 py-2">{r.driver === UNTAGGED ? <span className="text-gray-400 italic">{UNTAGGED}</span> : r.driver}</td>
+                              <td className="px-4 py-2 text-center">{r.chats}</td>
+                              <td className="px-4 py-2 text-center">{r.tickets}</td>
+                              <td className="px-4 py-2 text-center font-semibold">{r.chats + r.tickets}</td>
+                            </tr>
+                          ))}
+                          <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">
+                            <td className="px-4 py-2">TOTAL</td>
+                            <td className="px-4 py-2 text-center">{totalChats}</td>
+                            <td className="px-4 py-2 text-center">{totalTickets}</td>
+                            <td className="px-4 py-2 text-center">{totalChats + totalTickets}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {!loading && driverRows.length === 0 && (
+                <div className="text-center py-12 text-gray-400">
+                  <p className="text-lg">Select a date range and click Generate Report to see drivers.</p>
+                </div>
+              )}
+
+              {/* Custom Attributes reference */}
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">Custom Attributes</h2>
+                    <p className="text-xs text-gray-500 mt-0.5">Attribute definitions configured in tawk.to (reference — values aren&apos;t exposed by the API).</p>
+                  </div>
+                  <button onClick={loadAttributes} disabled={attrLoading} className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 transition-colors">
+                    {attrLoading ? "Loading…" : attrRows.length ? "Reload" : "Load Attributes"}
+                  </button>
+                </div>
+                {attrRows.length > 0 && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-900 text-white">
+                          <th className="px-4 py-2 text-left font-medium">Property</th>
+                          <th className="px-4 py-2 text-left font-medium">Object</th>
+                          <th className="px-4 py-2 text-left font-medium">Label</th>
+                          <th className="px-4 py-2 text-left font-medium">Key</th>
+                          <th className="px-4 py-2 text-left font-medium">Type</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {attrRows.map((a, i) => (
+                          <tr key={`${a.property}-${a.object}-${a.key}`} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                            <td className="px-4 py-2">{a.property}</td>
+                            <td className="px-4 py-2 text-gray-600">{a.object}</td>
+                            <td className="px-4 py-2">{a.label}</td>
+                            <td className="px-4 py-2 font-mono text-xs text-gray-600">{a.key}</td>
+                            <td className="px-4 py-2 text-gray-600">{a.dataType || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ─── Escalations ─── */}
+        {tab === "escalations" && <EscalationsPanel />}
+
+        {tab !== "escalations" && tab !== "drivers" && !loading && dailyRows.length === 0 && agentSummary.length === 0 && csatRows.length === 0 && ticketRows.length === 0 && (
           <div className="text-center py-20 text-gray-400">
             <p className="text-lg">Select a date range and click Generate Report</p>
           </div>

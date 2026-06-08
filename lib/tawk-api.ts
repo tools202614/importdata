@@ -190,3 +190,45 @@ export async function getChats(propertyId: string, startDate: string, endDate: s
 export async function getTickets(propertyId: string, startDate: string, endDate: string, pageSize = 500) {
   return fetchItems(`${BASE_URL}/ticket.list`, propertyId, startDate, endDate, pageSize);
 }
+
+// ─── Generic POST for non-list endpoints (returns full JSON body) ──────────
+async function tawkPost(endpoint: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const now = Date.now();
+  const wait = MIN_GAP - (now - lastRequestTime);
+  if (wait > 0) await sleep(wait);
+  lastRequestTime = Date.now();
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const res = await fetch(`${BASE_URL}/${endpoint}`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(body),
+    });
+    if (res.status === 429) {
+      await sleep(3000 * (attempt + 1));
+      lastRequestTime = Date.now();
+      continue;
+    }
+    if (!res.ok) throw new Error(`Tawk API error ${res.status}: ${await res.text()}`);
+    return await res.json();
+  }
+  throw new Error(`Tawk API: max retries exceeded for ${endpoint}`);
+}
+
+export interface CustomAttribute {
+  key: string;
+  object: string;
+  label?: string;
+  dataType?: string;
+  fullPath?: string;
+}
+
+/** List custom contact attribute definitions for a property ("person" | "organization"). */
+export async function getCustomAttributes(
+  propertyId: string,
+  object: "person" | "organization"
+): Promise<CustomAttribute[]> {
+  const json = await tawkPost("contact.attribute.list-custom", { propertyId, object });
+  const data = (json.data ?? {}) as { dataAttributes?: CustomAttribute[] };
+  return data.dataAttributes ?? [];
+}
