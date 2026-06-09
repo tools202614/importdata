@@ -24,3 +24,34 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* "Download PDF" on the Team Report uses the browser's print → Save as PDF.
+   Print only the report, one team per page. */
+@media print {
+  body * { visibility: hidden !important; }
+  #team-report-print,
+  #team-report-print * { visibility: visible !important; }
+  #team-report-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0;
+  }
+  #team-report-print .team-section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  #team-report-print .team-section + .team-section {
+    break-before: page;
+    page-break-before: always;
+  }
+  #team-report-print,
+  #team-report-print * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  @page { margin: 1.2cm; }
+}

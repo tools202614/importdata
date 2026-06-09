@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from "react";
 import { localDayUtcRange } from "@/lib/config";
 import { isDriverTag, driverLabel, UNTAGGED } from "@/lib/drivers";
 import EscalationsPanel from "./_components/EscalationsPanel";
+import TeamReportPanel from "./_components/TeamReportPanel";
 
 // ─── Types ───────────────────────────────────────────
 interface DailyRow {
@@ -101,7 +102,7 @@ function escapeCSV(val: string | number) {
 
 // ─── Component ───────────────────────────────────────
 export default function Dashboard() {
-  const [tab, setTab] = useState<"report" | "agent" | "csat" | "tickets" | "drivers" | "escalations">("report");
+  const [tab, setTab] = useState<"report" | "agent" | "csat" | "tickets" | "drivers" | "escalations" | "teamReport">("report");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [loading, setLoading] = useState(false);
@@ -478,9 +479,12 @@ export default function Dashboard() {
                 <button onClick={() => setTab("escalations")} className={`px-4 py-2 text-sm font-medium transition-colors border-l border-gray-300 ${tab === "escalations" ? "bg-gray-900 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>
                   Escalations
                 </button>
+                <button onClick={() => setTab("teamReport")} className={`px-4 py-2 text-sm font-medium transition-colors border-l border-gray-300 ${tab === "teamReport" ? "bg-gray-900 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>
+                  Team Report
+                </button>
               </div>
             </div>
-            {tab !== "escalations" && (
+            {tab !== "escalations" && tab !== "teamReport" && (
               <>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Start Date</label>
@@ -508,6 +512,9 @@ export default function Dashboard() {
             )}
             {tab === "escalations" && (
               <p className="text-sm text-gray-500 pb-2">Log and track support escalations — refunds, chargebacks, channel &amp; VOD issues.</p>
+            )}
+            {tab === "teamReport" && (
+              <p className="text-sm text-gray-500 pb-2">Daily per-team report — property chat volume &amp; common issues, downloadable as CSV/PDF.</p>
             )}
           </div>
           {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
@@ -959,7 +966,10 @@ export default function Dashboard() {
         {/* ─── Escalations ─── */}
         {tab === "escalations" && <EscalationsPanel />}
 
-        {tab !== "escalations" && tab !== "drivers" && !loading && dailyRows.length === 0 && agentSummary.length === 0 && csatRows.length === 0 && ticketRows.length === 0 && (
+        {/* ─── Team Report ─── */}
+        {tab === "teamReport" && <TeamReportPanel />}
+
+        {tab !== "escalations" && tab !== "drivers" && tab !== "teamReport" && !loading && dailyRows.length === 0 && agentSummary.length === 0 && csatRows.length === 0 && ticketRows.length === 0 && (
           <div className="text-center py-20 text-gray-400">
             <p className="text-lg">Select a date range and click Generate Report</p>
           </div>
