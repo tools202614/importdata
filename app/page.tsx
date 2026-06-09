@@ -132,6 +132,29 @@ export default function Dashboard() {
   const [attrRows, setAttrRows] = useState<AttributeRow[]>([]);
   const [attrLoading, setAttrLoading] = useState(false);
 
+  // Supabase sync status (header indicator + manual trigger)
+  const [syncInfo, setSyncInfo] = useState<{ configured: boolean; lastSyncedAt: string | null } | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  useEffect(() => {
+    fetch("/api/sync-state").then((r) => r.json()).then(setSyncInfo).catch(() => {});
+  }, []);
+
+  async function runSyncNow() {
+    setSyncing(true);
+    setError("");
+    try {
+      const res = await fetch("/api/sync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Sync failed");
+      const state = await fetch("/api/sync-state").then((r) => r.json());
+      setSyncInfo(state);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   const [today, setToday] = useState("");
   useEffect(() => { setToday(new Date().toISOString().split("T")[0]); }, []);
 
@@ -406,9 +429,27 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-[1400px] mx-auto px-6 py-4">
-          <h1 className="text-2xl font-bold text-gray-900">Tawk.to Reports</h1>
-          <p className="text-sm text-gray-500 mt-1">Generate daily chat volume and agent reports</p>
+        <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Tawk.to Reports</h1>
+            <p className="text-sm text-gray-500 mt-1">Generate daily chat volume and agent reports</p>
+          </div>
+          {syncInfo?.configured && (
+            <div className="flex items-center gap-3 text-sm shrink-0">
+              <span className="text-gray-500">
+                {syncInfo.lastSyncedAt
+                  ? `Synced ${new Date(syncInfo.lastSyncedAt).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+                  : "Not synced yet"}
+              </span>
+              <button
+                onClick={runSyncNow}
+                disabled={syncing}
+                className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              >
+                {syncing ? "Syncing…" : "Sync now"}
+              </button>
+            </div>
+          )}
         </div>
       </header>
 

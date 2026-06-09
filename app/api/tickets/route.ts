@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTickets } from "@/lib/tawk-api";
+import { getTickets } from "@/lib/data-source";
 import { PROPERTIES } from "@/lib/properties";
 import { dateKeyInTz } from "@/lib/config";
 
