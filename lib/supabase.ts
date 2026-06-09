@@ -30,6 +30,11 @@ export function getSupabase(): SupabaseClient {
   if (!client) {
     client = createClient(SUPABASE_URL, SUPABASE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
+      // Never let Next.js cache live DB reads/writes — always hit Supabase fresh.
+      global: {
+        fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+          fetch(input, { ...init, cache: "no-store" }),
+      },
     });
   }
   return client;
