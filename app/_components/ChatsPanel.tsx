@@ -88,6 +88,7 @@ export default function ChatsPanel() {
   const [to, setTo] = useState("");
   const [typeFilter, setTypeFilter] = useState<"" | "chat" | "ticket">("");
   const [property, setProperty] = useState("");
+  const [agentFilter, setAgentFilter] = useState("");
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
@@ -168,6 +169,9 @@ export default function ChatsPanel() {
     }
   }
 
+  const agentOptions = Array.from(new Set(rows.map((r) => r.agent).filter(Boolean))).sort();
+  const visibleRows = agentFilter ? rows.filter((r) => r.agent === agentFilter) : rows;
+
   return (
     <div className="space-y-4">
       {/* Filters */}
@@ -196,6 +200,13 @@ export default function ChatsPanel() {
               {PROPERTIES.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
             </select>
           </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Agent</label>
+            <select value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 max-w-[180px]">
+              <option value="">All agents</option>
+              {agentOptions.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
           <div className="flex-1 min-w-[160px]">
             <label className="block text-xs font-medium text-gray-500 mb-1">Search</label>
             <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="name, email, phone, agent" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" />
@@ -211,7 +222,8 @@ export default function ChatsPanel() {
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
         <div className="px-6 py-3 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">
-            Chats &amp; Tickets — {rows.length}
+            Chats &amp; Tickets — {visibleRows.length}
+            {agentFilter && <span className="ml-1 text-sm font-normal text-gray-400">· {agentFilter}</span>}
             <span className="ml-2 text-xs font-normal text-gray-400">click a row to view the conversation</span>
           </h2>
         </div>
@@ -233,7 +245,7 @@ export default function ChatsPanel() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => (
+              {visibleRows.map((r, i) => (
                 <tr key={`${r.type}-${r.id}`} onClick={() => openConversation(r)} className={`cursor-pointer hover:bg-blue-50 ${i % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
                   <td className="px-3 py-2 whitespace-nowrap">{r.channelUser || <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{r.email || <span className="text-gray-300">—</span>}</td>
@@ -254,7 +266,7 @@ export default function ChatsPanel() {
                   </td>
                 </tr>
               ))}
-              {rows.length === 0 && !loading && (
+              {visibleRows.length === 0 && !loading && (
                 <tr><td colSpan={11} className="text-center py-12 text-gray-400">No chats/tickets — pick a date and click Load (data appears after a sync).</td></tr>
               )}
             </tbody>
@@ -269,7 +281,10 @@ export default function ChatsPanel() {
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">{modalRow.channelUser || modalRow.email || "Conversation"}</h3>
-                <p className="text-xs text-gray-500">{modalRow.property} · {modalRow.type} · {fmt(modalRow.createdOn)}</p>
+                <p className="text-xs text-gray-500">
+                  {modalRow.property} · {modalRow.type} · {fmt(modalRow.createdOn)}
+                  {modalRow.agent ? <> · Agent: <span className="font-medium text-gray-700">{modalRow.agent}</span></> : null}
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <button
