@@ -3,9 +3,9 @@
 import { Fragment, useEffect, useState } from "react";
 import { localDayUtcRange } from "@/lib/config";
 import { isDriverTag, driverLabel, UNTAGGED } from "@/lib/drivers";
+import Link from "next/link";
 import EscalationsPanel from "./_components/EscalationsPanel";
 import TeamReportPanel from "./_components/TeamReportPanel";
-import ChatsPanel from "./_components/ChatsPanel";
 
 // ─── Types ───────────────────────────────────────────
 interface DailyRow {
@@ -103,7 +103,7 @@ function escapeCSV(val: string | number) {
 
 // ─── Component ───────────────────────────────────────
 export default function Dashboard() {
-  const [tab, setTab] = useState<"report" | "agent" | "csat" | "tickets" | "drivers" | "escalations" | "teamReport" | "chats">("report");
+  const [tab, setTab] = useState<"report" | "agent" | "csat" | "tickets" | "drivers" | "escalations" | "teamReport">("report");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [loading, setLoading] = useState(false);
@@ -436,22 +436,27 @@ export default function Dashboard() {
             <h1 className="text-2xl font-bold text-gray-900">Tawk.to Reports</h1>
             <p className="text-sm text-gray-500 mt-1">Generate daily chat volume and agent reports</p>
           </div>
-          {syncInfo?.configured && (
-            <div className="flex items-center gap-3 text-sm shrink-0">
-              <span className="text-gray-500">
-                {syncInfo.lastSyncedAt
-                  ? `Synced ${new Date(syncInfo.lastSyncedAt).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })}`
-                  : "Not synced yet"}
-              </span>
-              <button
-                onClick={runSyncNow}
-                disabled={syncing}
-                className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-50 disabled:opacity-50 transition-colors"
-              >
-                {syncing ? "Syncing…" : "Sync now"}
-              </button>
-            </div>
-          )}
+          <div className="flex items-center gap-3 text-sm shrink-0">
+            <Link href="/chats" className="bg-gray-900 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-gray-800 transition-colors">
+              Chats &amp; Tickets →
+            </Link>
+            {syncInfo?.configured && (
+              <>
+                <span className="text-gray-500">
+                  {syncInfo.lastSyncedAt
+                    ? `Synced ${new Date(syncInfo.lastSyncedAt).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+                    : "Not synced yet"}
+                </span>
+                <button
+                  onClick={runSyncNow}
+                  disabled={syncing}
+                  className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  {syncing ? "Syncing…" : "Sync now"}
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
@@ -483,12 +488,9 @@ export default function Dashboard() {
                 <button onClick={() => setTab("teamReport")} className={`px-4 py-2 text-sm font-medium transition-colors border-l border-gray-300 ${tab === "teamReport" ? "bg-gray-900 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>
                   Team Report
                 </button>
-                <button onClick={() => setTab("chats")} className={`px-4 py-2 text-sm font-medium transition-colors border-l border-gray-300 ${tab === "chats" ? "bg-gray-900 text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}>
-                  Chats
-                </button>
               </div>
             </div>
-            {tab !== "escalations" && tab !== "teamReport" && tab !== "chats" && (
+            {tab !== "escalations" && tab !== "teamReport" && (
               <>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Start Date</label>
@@ -519,9 +521,6 @@ export default function Dashboard() {
             )}
             {tab === "teamReport" && (
               <p className="text-sm text-gray-500 pb-2">Daily per-team report — property chat volume &amp; common issues, downloadable as CSV/PDF.</p>
-            )}
-            {tab === "chats" && (
-              <p className="text-sm text-gray-500 pb-2">All synced chats &amp; tickets — tag Chat Drivers &amp; Channel Issue per row; click a row to view the conversation.</p>
             )}
           </div>
           {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
@@ -976,10 +975,7 @@ export default function Dashboard() {
         {/* ─── Team Report ─── */}
         {tab === "teamReport" && <TeamReportPanel />}
 
-        {/* ─── Chats ─── */}
-        {tab === "chats" && <ChatsPanel />}
-
-        {tab !== "escalations" && tab !== "drivers" && tab !== "teamReport" && tab !== "chats" && !loading && dailyRows.length === 0 && agentSummary.length === 0 && csatRows.length === 0 && ticketRows.length === 0 && (
+        {tab !== "escalations" && tab !== "drivers" && tab !== "teamReport" && !loading && dailyRows.length === 0 && agentSummary.length === 0 && csatRows.length === 0 && ticketRows.length === 0 && (
           <div className="text-center py-20 text-gray-400">
             <p className="text-lg">Select a date range and click Generate Report</p>
           </div>
