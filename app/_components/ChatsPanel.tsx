@@ -231,6 +231,7 @@ export default function ChatsPanel() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-900 text-white">
+                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Property</th>
                 <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Channel User</th>
                 <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Email</th>
                 <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Phone</th>
@@ -247,6 +248,7 @@ export default function ChatsPanel() {
             <tbody>
               {visibleRows.map((r, i) => (
                 <tr key={`${r.type}-${r.id}`} onClick={() => openConversation(r)} className={`cursor-pointer hover:bg-blue-50 ${i % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
+                  <td className="px-3 py-2 whitespace-nowrap font-medium">{r.property || <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{r.channelUser || <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{r.email || <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{r.phone || <span className="text-gray-300">—</span>}</td>
@@ -267,7 +269,7 @@ export default function ChatsPanel() {
                 </tr>
               ))}
               {visibleRows.length === 0 && !loading && (
-                <tr><td colSpan={11} className="text-center py-12 text-gray-400">No chats/tickets — pick a date and click Load (data appears after a sync).</td></tr>
+                <tr><td colSpan={12} className="text-center py-12 text-gray-400">No chats/tickets — pick a date and click Load (data appears after a sync).</td></tr>
               )}
             </tbody>
           </table>
