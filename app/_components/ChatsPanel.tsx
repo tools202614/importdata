@@ -281,6 +281,27 @@ export default function ChatsPanel() {
                 <button onClick={() => setModalRow(null)} className="text-gray-400 hover:text-gray-700 text-2xl leading-none">×</button>
               </div>
             </div>
+            {/* Review tags — select drivers & issues right here */}
+            {(() => {
+              const lr = rows.find((r) => r.id === modalRow.id) ?? modalRow;
+              return (
+                <div className="px-6 py-3 border-b border-gray-200 bg-gray-50 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      Chat Drivers{lr.driversUpdatedAt ? <span className="text-gray-400 font-normal"> · updated {fmt(lr.driversUpdatedAt)}</span> : null}
+                    </label>
+                    <MultiSelect options={CHAT_DRIVER_OPTIONS} selected={lr.drivers} onChange={(v) => saveTags(lr, "drivers", v)} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      Channel Issue{lr.channelIssueUpdatedAt ? <span className="text-gray-400 font-normal"> · updated {fmt(lr.channelIssueUpdatedAt)}</span> : null}
+                    </label>
+                    <MultiSelect options={CHANNEL_ISSUE_OPTIONS} selected={lr.channelIssue} onChange={(v) => saveTags(lr, "channelIssue", v)} />
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="px-6 py-4 max-h-[60vh] overflow-y-auto">
               {detailLoading ? (
                 <p className="text-sm text-gray-400">Loading conversation…</p>
