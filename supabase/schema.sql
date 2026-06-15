@@ -93,6 +93,18 @@ create table if not exists sync_state (
   detail          jsonb
 );
 
+-- Manual per-chat/ticket tags applied in the Chats list view. Keyed by the
+-- conversation id; survives re-sync (the sync never writes this table).
+create table if not exists chat_tags (
+  id                        text primary key,
+  type                      text not null,                 -- 'chat' | 'ticket'
+  drivers                   jsonb not null default '[]'::jsonb,
+  drivers_updated_at        timestamptz,
+  channel_issue             jsonb not null default '[]'::jsonb,
+  channel_issue_updated_at  timestamptz
+);
+alter table chat_tags enable row level security;
+
 -- Lock everything down: only the service-role key (server) may access.
 alter table chats              enable row level security;
 alter table tickets            enable row level security;

@@ -232,3 +232,15 @@ export async function getCustomAttributes(
   const data = (json.data ?? {}) as { dataAttributes?: CustomAttribute[] };
   return data.dataAttributes ?? [];
 }
+
+/** Fetch a single chat (with full message transcript) by id. */
+export async function getChatById(propertyId: string, chatId: string): Promise<Record<string, unknown>> {
+  const json = await tawkPost("chat.get", { propertyId, chatId });
+  return (json.data ?? {}) as Record<string, unknown>;
+}
+
+/** Fetch a single ticket (with events) by id. */
+export async function getTicketById(propertyId: string, ticketId: string): Promise<Record<string, unknown>> {
+  const json = await tawkPost("ticket.get", { propertyId, ticketId });
+  return (json.data ?? {}) as Record<string, unknown>;
+}
