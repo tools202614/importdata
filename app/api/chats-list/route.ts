@@ -17,12 +17,17 @@ interface TagRow {
 const str = (v: unknown) => (v == null ? "" : String(v));
 
 function agentName(raw: Raw): string {
+  // "Last touch": when several agents handle one chat, use the last agent who
+  // actually sent a message. Walk the transcript from the end.
+  const msgs = (raw.messages as { sender?: { t?: string; n?: string } }[] | undefined) || [];
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const s = msgs[i].sender;
+    if (s?.t === "a" && s?.n) return s.n;
+  }
+  // Fallbacks when the transcript has no agent messages.
   const a = raw.agent as { name?: string } | undefined;
   if (a?.name) return a.name;
   if (raw.agentName) return str(raw.agentName);
-  for (const m of (raw.messages as { sender?: { t?: string; n?: string } }[] | undefined) || []) {
-    if (m.sender?.t === "a" && m.sender?.n) return m.sender.n;
-  }
   return "";
 }
 
