@@ -351,6 +351,24 @@ export default function Dashboard() {
     downloadCSV(`tawk_report_${startDate}_to_${endDate}.csv`, lines.join("\n"));
   }
 
+  // Per-hour export from the hourly_counts table (Supabase).
+  async function downloadHourlyCSV() {
+    if (!startDate || !endDate) { setError("Select a date range first."); return; }
+    try {
+      const res = await fetch(`/api/hourly-export?from=${startDate}&to=${endDate}`);
+      if (!res.ok) throw new Error(await res.text());
+      const { rows } = await res.json();
+      const lines = [["Date", "Property", "Hour", "Chat Volume", "Missed", "Offline", "Tickets"].map(escapeCSV).join(",")];
+      for (const r of rows) {
+        lines.push([r.date, escapeCSV(r.property), formatHour(r.hour), r.chat_volume, r.missed, r.offline, r.tickets].join(","));
+      }
+      if (rows.length === 0) { setError("No hourly data for this range (run a sync first)."); return; }
+      downloadCSV(`tawk_hourly_${startDate}_to_${endDate}.csv`, lines.join("\n"));
+    } catch (err) {
+      setError(String(err));
+    }
+  }
+
   function downloadAgentCSV() {
     if (agentSubTab === "summary") {
       const lines = [["Date", "Agent Name", "Total Duration", "Chat Count", "Thumbs Up", "Thumbs Down"].join(",")];
@@ -547,9 +565,14 @@ export default function Dashboard() {
                 </label>
                 <span className="text-xs text-gray-400 italic">Click a row to see hourly breakdown</span>
               </div>
-              <button onClick={downloadDailyCSV} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
-                Download CSV
-              </button>
+              <div className="flex gap-2">
+                <button onClick={downloadDailyCSV} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
+                  Download CSV
+                </button>
+                <button onClick={downloadHourlyCSV} className="bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-800 transition-colors">
+                  Download Hourly CSV
+                </button>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
