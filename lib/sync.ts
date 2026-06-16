@@ -10,7 +10,7 @@
 
 import { getSupabase } from "./supabase";
 import { PROPERTIES } from "./properties";
-import { dateKeyInTz, localDayUtcRange } from "./config";
+import { dateKeyInTz, hourInTz, localDayUtcRange } from "./config";
 import { UNTAGGED } from "./drivers";
 import * as live from "./tawk-api";
 
@@ -21,7 +21,10 @@ interface Chat {
   status?: string;
   offlineForm?: boolean;
   tags?: string[];
-  messages?: { sender?: { t?: string }; type?: string }[];
+  visitor?: { name?: string; email?: string; phone?: string };
+  agent?: { name?: string };
+  agentName?: string;
+  messages?: { sender?: { t?: string; n?: string }; type?: string }[];
 }
 interface Ticket {
   id?: string;
@@ -29,6 +32,18 @@ interface Ticket {
   createdOn?: string;
   updatedOn?: string;
   tags?: string[];
+  requester?: { name?: string; email?: string; phone?: string };
+  assignee?: { name?: string };
+}
+
+/** Last agent to send a message (last touch); falls back to assigned agent. */
+function lastTouchAgent(c: Chat): string {
+  const msgs = c.messages || [];
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const s = msgs[i].sender;
+    if (s?.t === "a" && s?.n) return s.n;
+  }
+  return c.agent?.name || c.agentName || "";
 }
 
 export interface SyncResult {
@@ -70,15 +85,25 @@ export async function runSync(opts: { days?: number; onlyPropertyId?: string } =
   let attrCount = 0;
 
   type CountRow = { day: string; property_id: string; property: string; chat_volume: number; missed: number; offline: number; tickets: number };
+  type HourRow = { date: string; property_id: string; property: string; hour: number; chat_volume: number; missed: number; offline: number; tickets: number };
   type DriverRow = { day: string; property_id: string; property: string; driver: string; chats: number; tickets: number };
+  type TagRow = Record<string, unknown>;
   const counts = new Map<string, CountRow>();
+  const hourly = new Map<string, HourRow>();
   const drivers = new Map<string, DriverRow>();
+  const tagRows: TagRow[] = [];
   const stamp = () => new Date().toISOString();
 
   const bumpCount = (day: string, prop: { id: string; name: string }, fn: (r: CountRow) => void) => {
     const k = `${day}|${prop.id}`;
     let r = counts.get(k);
     if (!r) { r = { day, property_id: prop.id, property: prop.name, chat_volume: 0, missed: 0, offline: 0, tickets: 0 }; counts.set(k, r); }
+    fn(r);
+  };
+  const bumpHourly = (day: string, hour: number, prop: { id: string; name: string }, fn: (r: HourRow) => void) => {
+    const k = `${day}|${prop.id}|${hour}`;
+    let r = hourly.get(k);
+    if (!r) { r = { date: day, property_id: prop.id, property: prop.name, hour, chat_volume: 0, missed: 0, offline: 0, tickets: 0 }; hourly.set(k, r); }
     fn(r);
   };
   const bumpDriver = (day: string, prop: { id: string; name: string }, tag: string, kind: "chats" | "tickets") => {
@@ -118,23 +143,42 @@ export async function runSync(opts: { days?: number; onlyPropertyId?: string } =
       ticketCount += rows.length;
     }
 
-    // Aggregate summaries (by report-timezone day)
+    // Aggregate summaries (by report-timezone day + hour) and seed chat_tags.
     for (const c of chats) {
+      if (c.id) {
+        tagRows.push({
+          id: c.id, type: "chat", property_id: prop.id, property: prop.name,
+          channel_user: c.visitor?.name ?? null, email: c.visitor?.email ?? null, phone: c.visitor?.phone ?? null,
+          agent: lastTouchAgent(c) || null, created_on: c.createdOn ?? null, last_seen: c.updatedOn ?? null, synced_at: stamp(),
+        });
+      }
       if (!c.createdOn) continue;
       const day = dateKeyInTz(c.createdOn);
+      const hour = hourInTz(c.createdOn);
       // "missed" matches the Report tab: a non-offline chat that got no agent reply.
       const hadAgent = (c.messages || []).some((m) => m.sender?.t === "a" && m.type === "msg");
-      bumpCount(day, prop, (r) => {
+      const apply = (r: { chat_volume: number; missed: number; offline: number }) => {
         r.chat_volume += 1;
         if (c.offlineForm) r.offline += 1;
         else if (!hadAgent) r.missed += 1;
-      });
+      };
+      bumpCount(day, prop, apply);
+      bumpHourly(day, hour, prop, apply);
       for (const tag of cleanTags(c.tags)) bumpDriver(day, prop, tag, "chats");
     }
     for (const t of tickets) {
+      if (t.id) {
+        tagRows.push({
+          id: t.id, type: "ticket", property_id: prop.id, property: prop.name,
+          channel_user: t.requester?.name ?? null, email: t.requester?.email ?? null, phone: t.requester?.phone ?? null,
+          agent: t.assignee?.name ?? null, created_on: t.createdOn ?? null, last_seen: t.updatedOn ?? null, synced_at: stamp(),
+        });
+      }
       if (!t.createdOn) continue;
       const day = dateKeyInTz(t.createdOn);
+      const hour = hourInTz(t.createdOn);
       bumpCount(day, prop, (r) => { r.tickets += 1; });
+      bumpHourly(day, hour, prop, (r) => { r.tickets += 1; });
       for (const tag of cleanTags(t.tags)) bumpDriver(day, prop, tag, "tickets");
     }
 
@@ -166,6 +210,17 @@ export async function runSync(opts: { days?: number; onlyPropertyId?: string } =
     const rows = Array.from(drivers.values()).map((r) => ({ ...r, updated_at: stamp() }));
     const { error } = await sb.from("chat_drivers_daily").upsert(rows, { onConflict: "day,property_id,driver" });
     if (error) throw new Error(`chat_drivers_daily upsert: ${error.message}`);
+  }
+  if (hourly.size) {
+    const rows = Array.from(hourly.values()).map((r) => ({ ...r, updated_at: stamp() }));
+    const { error } = await sb.from("hourly_counts").upsert(rows, { onConflict: "date,property_id,hour" });
+    if (error) throw new Error(`hourly_counts upsert: ${error.message}`);
+  }
+  // Seed chat_tags metadata (does NOT include drivers/channel_issue → review tags preserved).
+  for (let i = 0; i < tagRows.length; i += 500) {
+    const batch = tagRows.slice(i, i + 500);
+    const { error } = await sb.from("chat_tags").upsert(batch, { onConflict: "id" });
+    if (error) throw new Error(`chat_tags upsert: ${error.message}`);
   }
 
   const result: SyncResult = {

@@ -93,17 +93,45 @@ create table if not exists sync_state (
   detail          jsonb
 );
 
--- Manual per-chat/ticket tags applied in the Chats list view. Keyed by the
--- conversation id; survives re-sync (the sync never writes this table).
+-- The Chats list: one row per chat/ticket. Conversation metadata (populated by
+-- the sync AND by realtime webhooks) plus the reviewer's manual tags. Metadata
+-- upserts never include the tag columns, so review selections are preserved.
 create table if not exists chat_tags (
   id                        text primary key,
   type                      text not null,                 -- 'chat' | 'ticket'
+  property_id               text,
+  property                  text,
+  channel_user              text,
+  email                     text,
+  phone                     text,
+  agent                     text,                          -- last-touch agent
+  created_on                timestamptz,                   -- chat created / start
+  last_seen                 timestamptz,
   drivers                   jsonb not null default '[]'::jsonb,
   drivers_updated_at        timestamptz,
   channel_issue             jsonb not null default '[]'::jsonb,
-  channel_issue_updated_at  timestamptz
+  channel_issue_updated_at  timestamptz,
+  synced_at                 timestamptz
 );
+create index if not exists chat_tags_created_on_idx on chat_tags (created_on desc);
+create index if not exists chat_tags_property_idx    on chat_tags (property);
 alter table chat_tags enable row level security;
+
+-- Per-hour summary (mirror of daily_counts, bucketed by hour 0-23).
+create table if not exists hourly_counts (
+  date         date not null,
+  property_id  text not null,
+  property     text not null,
+  hour         integer not null,        -- 0-23 (report timezone)
+  chat_volume  integer not null default 0,
+  missed       integer not null default 0,
+  offline      integer not null default 0,
+  tickets      integer not null default 0,
+  updated_at   timestamptz not null default now(),
+  primary key (date, property_id, hour)
+);
+create index if not exists hourly_counts_date_idx on hourly_counts (date);
+alter table hourly_counts enable row level security;
 
 -- Lock everything down: only the service-role key (server) may access.
 alter table chats              enable row level security;

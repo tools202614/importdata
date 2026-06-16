@@ -4,124 +4,82 @@ import { SUPABASE_CONFIGURED, getSupabase } from "@/lib/supabase";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-type Raw = Record<string, unknown>;
-interface DbRow { id: string; property: string; property_id: string; raw: Raw }
 interface TagRow {
   id: string;
-  drivers: string[];
+  type: "chat" | "ticket";
+  property: string | null;
+  property_id: string | null;
+  channel_user: string | null;
+  email: string | null;
+  phone: string | null;
+  agent: string | null;
+  created_on: string | null;
+  last_seen: string | null;
+  drivers: string[] | null;
   drivers_updated_at: string | null;
-  channel_issue: string[];
+  channel_issue: string[] | null;
   channel_issue_updated_at: string | null;
 }
 
-const str = (v: unknown) => (v == null ? "" : String(v));
+const s = (v: unknown) => (v == null ? "" : String(v));
 
-function agentName(raw: Raw): string {
-  // "Last touch": when several agents handle one chat, use the last agent who
-  // actually sent a message. Walk the transcript from the end.
-  const msgs = (raw.messages as { sender?: { t?: string; n?: string } }[] | undefined) || [];
-  for (let i = msgs.length - 1; i >= 0; i--) {
-    const s = msgs[i].sender;
-    if (s?.t === "a" && s?.n) return s.n;
-  }
-  // Fallbacks when the transcript has no agent messages.
-  const a = raw.agent as { name?: string } | undefined;
-  if (a?.name) return a.name;
-  if (raw.agentName) return str(raw.agentName);
-  return "";
-}
-
-async function pageAll(table: "chats" | "tickets", startDate: string, endDate: string, property: string | null): Promise<DbRow[]> {
-  const sb = getSupabase();
-  const out: DbRow[] = [];
-  const size = 1000;
-  let from = 0;
-  for (;;) {
-    let q = sb
-      .from(table)
-      .select("id, property, property_id, raw")
-      .gte("created_on", startDate)
-      .lte("created_on", endDate)
-      .order("created_on", { ascending: false })
-      .range(from, from + size - 1);
-    if (property) q = q.eq("property", property);
-    const { data, error } = await q;
-    if (error) throw new Error(`${table}: ${error.message}`);
-    const rows = (data ?? []) as DbRow[];
-    out.push(...rows);
-    if (rows.length < size) break;
-    from += size;
-  }
-  return out;
-}
-
+// GET /api/chats-list?startDate=&endDate=&type=&property=&q=
+// Reads the unified chat_tags table (seeded by sync + realtime webhooks).
 export async function GET(req: NextRequest) {
   if (!SUPABASE_CONFIGURED) return NextResponse.json({ error: "Supabase not configured" }, { status: 503 });
   const sp = req.nextUrl.searchParams;
   const startDate = sp.get("startDate");
   const endDate = sp.get("endDate");
-  const type = sp.get("type"); // 'chat' | 'ticket' | null(all)
+  const type = sp.get("type");
   const property = sp.get("property");
   const q = sp.get("q")?.trim().toLowerCase();
   if (!startDate || !endDate) return NextResponse.json({ error: "startDate and endDate required" }, { status: 400 });
 
   try {
     const sb = getSupabase();
-    const chats = type === "ticket" ? [] : await pageAll("chats", startDate, endDate, property);
-    const tickets = type === "chat" ? [] : await pageAll("tickets", startDate, endDate, property);
-
-    const rows = [
-      ...chats.map((r) => {
-        const raw = r.raw || {};
-        const visitor = (raw.visitor as { name?: string; email?: string; phone?: string }) || {};
-        return {
-          id: r.id, type: "chat" as const, property: r.property, propertyId: r.property_id,
-          channelUser: str(visitor.name), email: str(visitor.email), phone: str(visitor.phone),
-          createdOn: str(raw.createdOn), lastSeen: str(raw.updatedOn), agent: agentName(raw),
-        };
-      }),
-      ...tickets.map((r) => {
-        const raw = r.raw || {};
-        const requester = (raw.requester as { name?: string; email?: string; phone?: string }) || {};
-        const assignee = (raw.assignee as { name?: string }) || {};
-        return {
-          id: r.id, type: "ticket" as const, property: r.property, propertyId: r.property_id,
-          channelUser: str(requester.name), email: str(requester.email), phone: str(requester.phone),
-          createdOn: str(raw.createdOn), lastSeen: str(raw.updatedOn), agent: str(assignee.name),
-        };
-      }),
-    ];
-
-    // Join tags
-    const ids = rows.map((r) => r.id);
-    const tagsById = new Map<string, TagRow>();
-    for (let i = 0; i < ids.length; i += 1000) {
-      const batch = ids.slice(i, i + 1000);
-      if (!batch.length) break;
-      const { data, error } = await sb.from("chat_tags").select("*").in("id", batch);
-      if (error) throw new Error(`chat_tags: ${error.message}`);
-      for (const t of (data ?? []) as TagRow[]) tagsById.set(t.id, t);
+    const out: TagRow[] = [];
+    const size = 1000;
+    let from = 0;
+    for (;;) {
+      let query = sb
+        .from("chat_tags")
+        .select("*")
+        .gte("created_on", startDate)
+        .lte("created_on", endDate)
+        .order("created_on", { ascending: false })
+        .range(from, from + size - 1);
+      if (type === "chat" || type === "ticket") query = query.eq("type", type);
+      if (property) query = query.eq("property", property);
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      const rows = (data ?? []) as TagRow[];
+      out.push(...rows);
+      if (rows.length < size) break;
+      from += size;
     }
 
-    let merged = rows.map((r) => {
-      const t = tagsById.get(r.id);
-      return {
-        ...r,
-        drivers: t?.drivers ?? [],
-        driversUpdatedAt: t?.drivers_updated_at ?? null,
-        channelIssue: t?.channel_issue ?? [],
-        channelIssueUpdatedAt: t?.channel_issue_updated_at ?? null,
-      };
-    });
+    let rows = out.map((r) => ({
+      id: r.id,
+      type: r.type,
+      property: s(r.property),
+      propertyId: s(r.property_id),
+      channelUser: s(r.channel_user),
+      email: s(r.email),
+      phone: s(r.phone),
+      createdOn: s(r.created_on),
+      lastSeen: s(r.last_seen),
+      agent: s(r.agent),
+      drivers: r.drivers ?? [],
+      driversUpdatedAt: r.drivers_updated_at,
+      channelIssue: r.channel_issue ?? [],
+      channelIssueUpdatedAt: r.channel_issue_updated_at,
+    }));
 
     if (q) {
-      merged = merged.filter((r) =>
-        [r.channelUser, r.email, r.phone, r.agent].some((v) => v.toLowerCase().includes(q))
-      );
+      rows = rows.filter((r) => [r.channelUser, r.email, r.phone, r.agent].some((v) => v.toLowerCase().includes(q)));
     }
-    merged.sort((a, b) => b.createdOn.localeCompare(a.createdOn));
 
-    return NextResponse.json({ rows: merged });
+    return NextResponse.json({ rows });
   } catch (err) {
     console.error("chats-list error:", err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
