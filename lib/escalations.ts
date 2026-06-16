@@ -38,106 +38,19 @@ export interface FormDef {
 
 const PROPERTY_OPTIONS = PROPERTIES.map((p) => p.name);
 
-// ─── Channel Issue ───────────────────────────────────────────────────────
-const CHANNEL_ISSUE: FormDef = {
-  id: "channel-issue",
-  title: "Channel Issue",
-  statusKey: "status",
-  dateKey: "date",
-  propertyKey: "property",
-  driverKey: "commonIssue",
-  fields: [
-    { key: "team", label: "Team", type: "select", options: ["Sunshine", "PY/FMB", "Powell"], required: true },
-    { key: "date", label: "Date", type: "date", required: true },
-    { key: "property", label: "Property", type: "select", options: PROPERTY_OPTIONS, required: true },
-    { key: "customerEmail", label: "Customer Email", type: "email" },
-    {
-      key: "commonIssue",
-      label: "Common Issues",
-      type: "select",
-      options: [
-        "New Account / Customer",
-        "Renewal Inquiry",
-        "Password Reset to Process Payment",
-        "Device Activation",
-        "App Installation",
-        "Channels Buffering",
-        "TV Series Not Working",
-        "Renewal",
-        "Renewal Issue / Unable to Process Renewal Due to Website Issue",
-        "Payment Confirmation",
-        "VOD Not Working",
-        "Maximum Devices",
-        "Channel Issue",
-        "Channel, Movie & TV Series Request",
-        "Blank / No Issue Recorded",
-      ],
-    },
-    { key: "additionalNotes", label: "Additional Notes", type: "textarea" },
-    { key: "status", label: "Status", type: "select", options: ["Open", "In Progress", "Resolved"], required: true },
-  ],
-};
-
-// ─── VOD Issue ─────────────────────────────────────────────────────────────
-const VOD_ISSUE: FormDef = {
-  id: "vod-issue",
-  title: "VOD Issue",
-  statusKey: "status",
-  dateKey: "date",
-  driverKey: "customerIssue",
-  fields: [
-    { key: "date", label: "Date", type: "date", required: true },
-    { key: "vod", label: "VOD", type: "text", required: true },
-    {
-      key: "customerIssue",
-      label: "Customer Issue",
-      type: "select",
-      options: [
-        "Playback Error",
-        "Buffering",
-        "No Audio",
-        "Freeze",
-        "Not Playing",
-        "Foreign Language",
-        "Playing on Foreign Language",
-        "Working",
-      ],
-    },
-    { key: "panel", label: "Panel", type: "text" },
-    { key: "verifiedBy", label: "Verified By", type: "text" },
-    {
-      key: "status",
-      label: "Status",
-      type: "select",
-      options: ["Fixed", "Flagged", "Reported/Pending", "Working", "Error on Flagged/Reported to Dookie"],
-      required: true,
-    },
-  ],
-};
-
 // ─── Chargeback ──────────────────────────────────────────────────────────
+// Simplified to the important fields (per request). Chat Drivers are no longer a
+// form — they're tagged per-chat on the Chats page (chat_tags.drivers).
 const CHARGEBACK: FormDef = {
   id: "chargeback",
   title: "Chargeback",
   statusKey: "status",
-  dateKey: "disputeCreated",
   propertyKey: "property",
   fields: [
     { key: "property", label: "Property", type: "select", options: PROPERTY_OPTIONS, required: true },
     { key: "customerName", label: "Customer Name", type: "text", required: true },
     { key: "email", label: "Email Address", type: "email" },
     { key: "amount", label: "Amount", type: "number" },
-    { key: "lastPurchased", label: "Last Purchased", type: "select", options: ["Nora", "Squarespace"] },
-    { key: "oldNumber", label: "Old Number", type: "text" },
-    { key: "newAccount", label: "New Account", type: "text" },
-    {
-      key: "accountStatus",
-      label: "Account Status",
-      type: "select",
-      options: ["Active", "Expired", "TOA", "No Account"],
-    },
-    { key: "disputeCreated", label: "Dispute Created", type: "date" },
-    { key: "phoneNumber", label: "Phone Number", type: "text" },
     {
       key: "status",
       label: "Status",
@@ -149,11 +62,7 @@ const CHARGEBACK: FormDef = {
   ],
 };
 
-// NOTE: A "Refund Request" form is part of the broader vision but its field
-// spec was never provided, so it is intentionally omitted. Add it here once the
-// real fields are confirmed.
-
-export const ESCALATION_FORMS: FormDef[] = [CHANNEL_ISSUE, VOD_ISSUE, CHARGEBACK];
+export const ESCALATION_FORMS: FormDef[] = [CHARGEBACK];
 
 export function getForm(formId: string): FormDef | undefined {
   return ESCALATION_FORMS.find((f) => f.id === formId);

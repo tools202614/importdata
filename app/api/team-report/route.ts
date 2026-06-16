@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SUPABASE_CONFIGURED, getSupabase } from "@/lib/supabase";
 import { TEAMS, teamForProperty } from "@/lib/teams";
+import { localDayUtcRange } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
@@ -49,13 +50,10 @@ export async function GET(req: NextRequest) {
       volumeByProperty.set(p, (volumeByProperty.get(p) ?? 0) + v);
     }
 
-    // 2) Common issues from logged Channel Issue records (grouped by team via property).
-    const { data: esc, error: escErr } = await sb
-      .from("escalations")
-      .select("data, created_at")
-      .eq("form_id", "channel-issue")
-      .limit(100000);
-    if (escErr) throw new Error(`escalations: ${escErr.message}`);
+    // 2) Common issues from per-chat Chat Drivers (chat_tags.drivers), grouped by
+    //    team via the chat's property.
+    const startUtc = localDayUtcRange(from).startUtc.toISOString();
+    const endUtc = localDayUtcRange(to).endUtc.toISOString();
 
     // team name -> (issue -> count)
     const issuesByTeam = new Map<string, Map<string, number>>();
@@ -65,16 +63,25 @@ export async function GET(req: NextRequest) {
       m.set(issue, (m.get(issue) ?? 0) + 1);
     };
 
-    for (const row of esc ?? []) {
-      const data = (row as { data: Record<string, string> }).data || {};
-      const createdAt = String((row as { created_at: string }).created_at || "");
-      const recDate = (data.date || createdAt).slice(0, 10);
-      if (recDate < from || recDate > to) continue;
-      const issue = (data.commonIssue || "").trim();
-      if (!issue) continue;
-      const property = (data.property || "").trim();
-      const team = teamForProperty(property) ?? UNASSIGNED;
-      addIssue(team, issue);
+    const size = 1000;
+    let offset = 0;
+    for (;;) {
+      const { data: ct, error: ctErr } = await sb
+        .from("chat_tags")
+        .select("drivers, property")
+        .gte("created_on", startUtc)
+        .lte("created_on", endUtc)
+        .range(offset, offset + size - 1);
+      if (ctErr) throw new Error(`chat_tags: ${ctErr.message}`);
+      const rows = (ct ?? []) as { drivers: string[] | null; property: string | null }[];
+      for (const row of rows) {
+        const drivers = (row.drivers ?? []).filter((d) => d && d.trim());
+        if (!drivers.length) continue;
+        const team = teamForProperty(String(row.property ?? "")) ?? UNASSIGNED;
+        for (const d of drivers) addIssue(team, d);
+      }
+      if (rows.length < size) break;
+      offset += size;
     }
 
     // 3) Assemble per-team blocks.
