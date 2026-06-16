@@ -93,6 +93,9 @@ export default function ChatsPanel() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [live, setLive] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const loadRef = useRef<() => void>(() => {});
 
   // Conversation modal
   const [modalRow, setModalRow] = useState<Row | null>(null);
@@ -121,12 +124,21 @@ export default function ChatsPanel() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed");
       setRows(data.rows);
+      setLoaded(true);
     } catch (err) {
       setError(String(err));
     } finally {
       setLoading(false);
     }
   }
+
+  // Auto-refresh so realtime (webhook) rows appear without a manual reload.
+  loadRef.current = load;
+  useEffect(() => {
+    if (!live || !loaded) return;
+    const t = setInterval(() => loadRef.current(), 25000);
+    return () => clearInterval(t);
+  }, [live, loaded]);
 
   async function saveTags(row: Row, field: "drivers" | "channelIssue", values: string[]) {
     // optimistic
@@ -214,6 +226,10 @@ export default function ChatsPanel() {
           <button onClick={load} disabled={loading} className="bg-gray-900 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50">
             {loading ? "Loading…" : "Load Chats"}
           </button>
+          <label className="flex items-center gap-2 text-sm text-gray-600 pb-2" title="Auto-refresh every 25s for realtime rows">
+            <input type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} className="rounded" />
+            Live{live && loaded && <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />}
+          </label>
         </div>
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
       </div>

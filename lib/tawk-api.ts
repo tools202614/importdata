@@ -244,3 +244,34 @@ export async function getTicketById(propertyId: string, ticketId: string): Promi
   const json = await tawkPost("ticket.get", { propertyId, ticketId });
   return (json.data ?? {}) as Record<string, unknown>;
 }
+
+// ─── Webhooks ──────────────────────────────────────────────────────────────
+export interface WebhookConfig {
+  hookId?: string;
+  events?: string[];
+  url?: string;
+  enabled?: boolean;
+  name?: string;
+}
+
+export async function listWebhooks(propertyId: string): Promise<WebhookConfig[]> {
+  const json = await tawkPost("webhooks.list", { propertyId });
+  const data = json.data;
+  if (Array.isArray(data)) return data as WebhookConfig[];
+  const arr = (data as { webhooks?: WebhookConfig[] })?.webhooks;
+  return Array.isArray(arr) ? arr : [];
+}
+
+export async function createWebhook(
+  propertyId: string,
+  events: string[],
+  url: string,
+  name: string
+): Promise<string | undefined> {
+  const json = await tawkPost("webhooks.create", { propertyId, events, url, enabled: true, name });
+  return (json.data as { hookId?: string })?.hookId;
+}
+
+export async function removeWebhook(propertyId: string, hookId: string): Promise<void> {
+  await tawkPost("webhooks.remove", { propertyId, hookId });
+}
