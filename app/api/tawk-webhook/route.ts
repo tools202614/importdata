@@ -46,6 +46,12 @@ export async function POST(req: NextRequest) {
   if (!SUPABASE_CONFIGURED) return NextResponse.json({ ok: true, note: "supabase off" });
 
   const event = String(pick(body, "event") ?? "");
+
+  // TEMP: capture the raw payload (one row per event type) to confirm tawk's real
+  // field shape, since Vercel logs aren't reachable from the build env. Remove later.
+  try {
+    await getSupabase().from("sync_state").upsert({ id: `whdbg:${event || "unknown"}`, last_synced_at: new Date().toISOString(), detail: body });
+  } catch { /* ignore */ }
   const isTicket = event.startsWith("ticket");
   const propertyId = String(pick(body, "property.id", "propertyId", "property") ?? "");
   const id = String(
