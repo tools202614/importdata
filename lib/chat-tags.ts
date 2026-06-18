@@ -20,9 +20,19 @@ export const CHAT_DRIVER_OPTIONS = [
   "Channel Issue",
   "Channel, Movie & TV Series Request",
   "Blank / No Issue Recorded",
+  // Channel-issue subtypes — merged into Chat Drivers so the table needs one less column.
+  "Playback Error",
+  "Buffering",
+  "No Audio",
+  "Freezing",
+  "Channel Owner has Expired",
+  "Language",
   "None",
 ];
 
+// Kept for backward compatibility: the chat_tags.channel_issue column and the
+// /api/chat-tags PATCH validation still reference these. The Chats table no
+// longer surfaces a separate Channel Issue selector (options live in CHAT_DRIVER_OPTIONS).
 export const CHANNEL_ISSUE_OPTIONS = [
   "Playback Error",
   "Buffering",

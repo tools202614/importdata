@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { localDayUtcRange } from "@/lib/config";
 import { PROPERTIES } from "@/lib/properties";
-import { CHAT_DRIVER_OPTIONS, CHANNEL_ISSUE_OPTIONS } from "@/lib/chat-tags";
+import { CHAT_DRIVER_OPTIONS } from "@/lib/chat-tags";
 
 interface Row {
   id: string;
@@ -249,14 +249,9 @@ export default function ChatsPanel() {
               <tr className="bg-gray-900 text-white">
                 <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Property</th>
                 <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Channel User</th>
-                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Email</th>
-                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Phone</th>
-                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Created</th>
                 <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Last Seen</th>
                 <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Agent</th>
                 <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Chat Drivers</th>
-                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Updated</th>
-                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Channel Issue</th>
                 <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Updated</th>
                 <th className="px-3 py-2 text-center font-medium whitespace-nowrap">Type</th>
               </tr>
@@ -266,26 +261,19 @@ export default function ChatsPanel() {
                 <tr key={`${r.type}-${r.id}`} onClick={() => openConversation(r)} className={`cursor-pointer hover:bg-blue-50 ${i % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
                   <td className="px-3 py-2 whitespace-nowrap font-medium">{r.property || <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{r.channelUser || <span className="text-gray-300">—</span>}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">{r.email || <span className="text-gray-300">—</span>}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">{r.phone || <span className="text-gray-300">—</span>}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-600">{fmt(r.createdOn)}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-600">{fmt(r.lastSeen)}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{r.agent || <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 py-2 align-top">
                     <MultiSelect options={CHAT_DRIVER_OPTIONS} selected={r.drivers} onChange={(v) => saveTags(r, "drivers", v)} />
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap text-gray-500 text-xs">{fmt(r.driversUpdatedAt)}</td>
-                  <td className="px-3 py-2 align-top">
-                    <MultiSelect options={CHANNEL_ISSUE_OPTIONS} selected={r.channelIssue} onChange={(v) => saveTags(r, "channelIssue", v)} />
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-gray-500 text-xs">{fmt(r.channelIssueUpdatedAt)}</td>
                   <td className="px-3 py-2 text-center whitespace-nowrap">
                     <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${r.type === "chat" ? "bg-green-100 text-green-700" : "bg-purple-100 text-purple-700"}`}>{r.type}</span>
                   </td>
                 </tr>
               ))}
               {visibleRows.length === 0 && !loading && (
-                <tr><td colSpan={12} className="text-center py-12 text-gray-400">No chats/tickets — pick a date and click Load (data appears after a sync).</td></tr>
+                <tr><td colSpan={7} className="text-center py-12 text-gray-400">No chats/tickets — pick a date and click Load (data appears after a sync).</td></tr>
               )}
             </tbody>
           </table>
@@ -318,18 +306,12 @@ export default function ChatsPanel() {
             {(() => {
               const lr = rows.find((r) => r.id === modalRow.id) ?? modalRow;
               return (
-                <div className="px-6 py-3 border-b border-gray-200 bg-gray-50 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="px-6 py-3 border-b border-gray-200 bg-gray-50">
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">
                       Chat Drivers{lr.driversUpdatedAt ? <span className="text-gray-400 font-normal"> · updated {fmt(lr.driversUpdatedAt)}</span> : null}
                     </label>
                     <MultiSelect options={CHAT_DRIVER_OPTIONS} selected={lr.drivers} onChange={(v) => saveTags(lr, "drivers", v)} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">
-                      Channel Issue{lr.channelIssueUpdatedAt ? <span className="text-gray-400 font-normal"> · updated {fmt(lr.channelIssueUpdatedAt)}</span> : null}
-                    </label>
-                    <MultiSelect options={CHANNEL_ISSUE_OPTIONS} selected={lr.channelIssue} onChange={(v) => saveTags(lr, "channelIssue", v)} />
                   </div>
                 </div>
               );
