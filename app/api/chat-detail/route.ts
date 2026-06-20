@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getChatById, getTicketById } from "@/lib/tawk-api";
 import { SUPABASE_CONFIGURED, getSupabase } from "@/lib/supabase";
+import { requireAuth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -24,11 +25,21 @@ function normalizeChat(raw: Raw): { messages: Msg[]; transcript: string } {
 
 // GET /api/chat-detail?id=&propertyId=&type=chat|ticket
 export async function GET(req: NextRequest) {
+  const g = requireAuth(req);
+  if ("error" in g) return g.error;
+  const { session } = g;
   const sp = req.nextUrl.searchParams;
   const id = sp.get("id");
   const propertyId = sp.get("propertyId");
   const type = sp.get("type") || "chat";
   if (!id || !propertyId) return NextResponse.json({ error: "id and propertyId required" }, { status: 400 });
+
+  // Agents may only open their own conversations.
+  if (session.role === "agent") {
+    if (!session.agentName || !SUPABASE_CONFIGURED) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const { data } = await getSupabase().from("chat_tags").select("agent").eq("id", id).maybeSingle();
+    if (!data || data.agent !== session.agentName) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   try {
     if (type === "ticket") {

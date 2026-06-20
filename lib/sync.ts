@@ -1,12 +1,12 @@
-// ─────────────────────────────────────────────────────────────────────────
-// Sync job: tawk.to → Supabase.
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Sync job: tawk.to â†’ Supabase.
 //
 // For a recent window it pulls chats & tickets for every property, upserts the
 // raw objects, recomputes the daily summary tables (daily_counts +
 // chat_drivers_daily) for the covered days, refreshes custom attributes, and
 // stamps sync_state. Re-run daily with a small overlap so each day gets a full
 // recount the day after (statuses settle, late items get picked up).
-// ─────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 import { getSupabase } from "./supabase";
 import { PROPERTIES } from "./properties";
@@ -60,6 +60,15 @@ function cleanTags(tags: string[] | undefined): string[] {
   const t = (tags || []).filter((x) => typeof x === "string" && x.trim());
   return t.length ? t : [UNTAGGED];
 }
+
+// PostgreSQL rejects the U+0000 (null) code point in jsonb/text (SQLSTATE 22P05:
+// "unsupported Unicode escape sequence"). Some tawk messages carry it, which made
+// whole property batches fail to upsert. Strip it before any insert.
+function stripNul<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value).replace(/\\u0000/g, "")) as T;
+}
+const noNul = (s: string | null | undefined): string | null =>
+  s == null ? null : s.replace(new RegExp(String.fromCharCode(0), "g"), "");
 
 /**
  * @param days how many days back to cover (inclusive of today). Default 2 so
@@ -123,7 +132,7 @@ export async function runSync(opts: { days?: number; onlyPropertyId?: string } =
         .filter((c) => c.id)
         .map((c) => ({
           id: c.id, property_id: prop.id, property: prop.name,
-          created_on: c.createdOn ?? null, updated_on: c.updatedOn ?? null, raw: c, synced_at: stamp(),
+          created_on: c.createdOn ?? null, updated_on: c.updatedOn ?? null, raw: stripNul(c), synced_at: stamp(),
         }));
       const { error } = await sb.from("chats").upsert(rows, { onConflict: "id" });
       if (error) throw new Error(`chats upsert (${prop.name}): ${error.message}`);
@@ -136,7 +145,7 @@ export async function runSync(opts: { days?: number; onlyPropertyId?: string } =
         .filter((t) => t.id)
         .map((t) => ({
           id: t.id, human_id: t.humanId ?? null, property_id: prop.id, property: prop.name,
-          created_on: t.createdOn ?? null, updated_on: t.updatedOn ?? null, raw: t, synced_at: stamp(),
+          created_on: t.createdOn ?? null, updated_on: t.updatedOn ?? null, raw: stripNul(t), synced_at: stamp(),
         }));
       const { error } = await sb.from("tickets").upsert(rows, { onConflict: "id" });
       if (error) throw new Error(`tickets upsert (${prop.name}): ${error.message}`);
@@ -148,8 +157,8 @@ export async function runSync(opts: { days?: number; onlyPropertyId?: string } =
       if (c.id) {
         tagRows.push({
           id: c.id, type: "chat", property_id: prop.id, property: prop.name,
-          channel_user: c.visitor?.name ?? null, email: c.visitor?.email ?? null, phone: c.visitor?.phone ?? null,
-          agent: lastTouchAgent(c) || null, created_on: c.createdOn ?? null, last_seen: c.updatedOn ?? null, synced_at: stamp(),
+          channel_user: noNul(c.visitor?.name), email: noNul(c.visitor?.email), phone: noNul(c.visitor?.phone),
+          agent: noNul(lastTouchAgent(c)) || null, created_on: c.createdOn ?? null, last_seen: c.updatedOn ?? null, synced_at: stamp(),
         });
       }
       if (!c.createdOn) continue;
@@ -170,8 +179,8 @@ export async function runSync(opts: { days?: number; onlyPropertyId?: string } =
       if (t.id) {
         tagRows.push({
           id: t.id, type: "ticket", property_id: prop.id, property: prop.name,
-          channel_user: t.requester?.name ?? null, email: t.requester?.email ?? null, phone: t.requester?.phone ?? null,
-          agent: t.assignee?.name ?? null, created_on: t.createdOn ?? null, last_seen: t.updatedOn ?? null, synced_at: stamp(),
+          channel_user: noNul(t.requester?.name), email: noNul(t.requester?.email), phone: noNul(t.requester?.phone),
+          agent: noNul(t.assignee?.name), created_on: t.createdOn ?? null, last_seen: t.updatedOn ?? null, synced_at: stamp(),
         });
       }
       if (!t.createdOn) continue;
@@ -195,7 +204,7 @@ export async function runSync(opts: { days?: number; onlyPropertyId?: string } =
           if (!error) attrCount += rows.length;
         }
       } catch {
-        /* property may lack scope/attributes — skip */
+        /* property may lack scope/attributes â€” skip */
       }
     }
   }
@@ -216,7 +225,7 @@ export async function runSync(opts: { days?: number; onlyPropertyId?: string } =
     const { error } = await sb.from("hourly_counts").upsert(rows, { onConflict: "date,property_id,hour" });
     if (error) throw new Error(`hourly_counts upsert: ${error.message}`);
   }
-  // Seed chat_tags metadata (does NOT include drivers/channel_issue → review tags preserved).
+  // Seed chat_tags metadata (does NOT include drivers/channel_issue â†’ review tags preserved).
   for (let i = 0; i < tagRows.length; i += 500) {
     const batch = tagRows.slice(i, i + 500);
     const { error } = await sb.from("chat_tags").upsert(batch, { onConflict: "id" });

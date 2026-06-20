@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { localDayUtcRange } from "@/lib/config";
 import { PROPERTIES } from "@/lib/properties";
 import { CHAT_DRIVER_OPTIONS } from "@/lib/chat-tags";
+import { useAuth } from "./AuthProvider";
 
 interface Row {
   id: string;
@@ -84,6 +85,8 @@ function MultiSelect({
 }
 
 export default function ChatsPanel() {
+  const { user } = useAuth();
+  const isAdmin = user.role === "admin";
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [typeFilter, setTypeFilter] = useState<"" | "chat" | "ticket">("");
@@ -212,13 +215,15 @@ export default function ChatsPanel() {
               {PROPERTIES.map((p) => <option key={p.id} value={p.name}>{p.name}</option>)}
             </select>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Agent</label>
-            <select value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 max-w-[180px]">
-              <option value="">All agents</option>
-              {agentOptions.map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </div>
+          {isAdmin && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Agent</label>
+              <select value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 max-w-[180px]">
+                <option value="">All agents</option>
+                {agentOptions.map((a) => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+          )}
           <div className="flex-1 min-w-[160px]">
             <label className="block text-xs font-medium text-gray-500 mb-1">Search</label>
             <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="name, email, phone, agent" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" />

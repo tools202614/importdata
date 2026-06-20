@@ -1,10 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { SUPABASE_CONFIGURED, getSupabase } from "@/lib/supabase";
+import { requireAuth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 // GET /api/sync-state — last sync time + summary, for the UI freshness indicator.
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const g = requireAuth(req);
+  if ("error" in g) return g.error;
   if (!SUPABASE_CONFIGURED) {
     return NextResponse.json({ configured: false, lastSyncedAt: null, detail: null });
   }

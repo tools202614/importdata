@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getChats, getTickets } from "@/lib/data-source";
 import { PROPERTIES } from "@/lib/properties";
 import { dateKeyInTz, hourInTz } from "@/lib/config";
+import { requireAdmin } from "@/lib/auth";
 
 export const maxDuration = 300;
 
@@ -93,6 +94,8 @@ function ensureBucket(buckets: Record<string, PropDayBucket>, key: string): Prop
 }
 
 export async function GET(req: NextRequest) {
+  const g = requireAdmin(req);
+  if ("error" in g) return g.error;
   const { searchParams } = req.nextUrl;
   const startDate = searchParams.get("startDate");
   const endDate = searchParams.get("endDate");

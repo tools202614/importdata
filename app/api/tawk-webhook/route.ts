@@ -7,6 +7,12 @@ export const dynamic = "force-dynamic";
 
 const PROP_NAME = new Map(PROPERTIES.map((p) => [p.id, p.name]));
 
+// PostgreSQL rejects U+0000 (null) in jsonb/text (SQLSTATE 22P05). Strip it.
+const noNul = (s: string): string => s.replace(new RegExp(String.fromCharCode(0), "g"), "");
+function stripNul<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value).replace(/\\u0000/g, "")) as T;
+}
+
 function pick<T = unknown>(obj: Record<string, unknown> | undefined, ...paths: string[]): T | undefined {
   if (!obj) return undefined;
   for (const path of paths) {
@@ -50,7 +56,7 @@ export async function POST(req: NextRequest) {
   // TEMP: capture the raw payload (one row per event type) to confirm tawk's real
   // field shape, since Vercel logs aren't reachable from the build env. Remove later.
   try {
-    await getSupabase().from("sync_state").upsert({ id: `whdbg:${event || "unknown"}`, last_synced_at: new Date().toISOString(), detail: body });
+    await getSupabase().from("sync_state").upsert({ id: `whdbg:${event || "unknown"}`, last_synced_at: new Date().toISOString(), detail: stripNul(body) });
   } catch { /* ignore */ }
   const isTicket = event.startsWith("ticket");
   const propertyId = String(pick(body, "property.id", "propertyId", "property") ?? "");
@@ -73,9 +79,9 @@ export async function POST(req: NextRequest) {
     property: PROP_NAME.get(propertyId) ?? propertyId,
     synced_at: new Date().toISOString(),
   };
-  const name = pick(person, "name"); if (name != null) row.channel_user = String(name);
-  const email = pick(person, "email"); if (email != null) row.email = String(email);
-  const phone = pick(person, "phone"); if (phone != null) row.phone = String(phone);
+  const name = pick(person, "name"); if (name != null) row.channel_user = noNul(String(name));
+  const email = pick(person, "email"); if (email != null) row.email = noNul(String(email));
+  const phone = pick(person, "phone"); if (phone != null) row.phone = noNul(String(phone));
 
   // chat:start / ticket:create → set created_on; chat:end (or any event) → bump last_seen.
   if (event.endsWith(":start") || event.endsWith(":create")) row.created_on = time;

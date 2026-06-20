@@ -1,11 +1,13 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { localDayUtcRange } from "@/lib/config";
 import { isDriverTag, driverLabel, UNTAGGED } from "@/lib/drivers";
 import Link from "next/link";
 import EscalationsPanel from "./_components/EscalationsPanel";
 import TeamReportPanel from "./_components/TeamReportPanel";
+import { useAuth, UserMenu } from "./_components/AuthProvider";
 
 // ─── Types ───────────────────────────────────────────
 interface DailyRow {
@@ -103,6 +105,13 @@ function escapeCSV(val: string | number) {
 
 // ─── Component ───────────────────────────────────────
 export default function Dashboard() {
+  const { user } = useAuth();
+  const router = useRouter();
+  // Agents don't use the reports dashboard — send them to their Chats view.
+  useEffect(() => {
+    if (user.role === "agent") router.replace("/chats");
+  }, [user.role, router]);
+
   const [tab, setTab] = useState<"report" | "agent" | "csat" | "tickets" | "drivers" | "escalations" | "teamReport">("report");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -446,6 +455,7 @@ export default function Dashboard() {
   }
 
   // ─── Render ─────────────────────────────────────────
+  if (user.role === "agent") return null; // redirecting to /chats
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 shadow-sm">
@@ -457,6 +467,9 @@ export default function Dashboard() {
           <div className="flex items-center gap-3 text-sm shrink-0">
             <Link href="/chats" className="bg-gray-900 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-gray-800 transition-colors">
               Chats &amp; Tickets →
+            </Link>
+            <Link href="/accounts" className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-50 transition-colors">
+              Accounts
             </Link>
             {syncInfo?.configured && (
               <>
@@ -474,6 +487,7 @@ export default function Dashboard() {
                 </button>
               </>
             )}
+            <UserMenu />
           </div>
         </div>
       </header>

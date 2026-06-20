@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SUPABASE_CONFIGURED, getSupabase } from "@/lib/supabase";
 import { TEAMS, teamForProperty } from "@/lib/teams";
 import { localDayUtcRange } from "@/lib/config";
+import { requireAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,8 @@ const pct = (n: number, total: number) => (total > 0 ? Math.round((n / total) * 
 
 // GET /api/team-report?from=YYYY-MM-DD&to=YYYY-MM-DD
 export async function GET(req: NextRequest) {
+  const g = requireAdmin(req);
+  if ("error" in g) return g.error;
   const from = req.nextUrl.searchParams.get("from");
   const to = req.nextUrl.searchParams.get("to");
   if (!from || !to) {

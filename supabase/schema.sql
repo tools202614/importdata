@@ -133,6 +133,20 @@ create table if not exists hourly_counts (
 create index if not exists hourly_counts_date_idx on hourly_counts (date);
 alter table hourly_counts enable row level security;
 
+-- Dashboard login accounts (admin / agent). Passwords are scrypt-hashed by the
+-- app; the server validates the session token. Agent accounts are scoped to
+-- their own chats via agent_name (must match the tawk display name exactly).
+create table if not exists app_users (
+  id            uuid primary key default gen_random_uuid(),
+  username      text not null unique,                              -- stored lowercased
+  password_hash text not null,
+  role          text not null default 'agent' check (role in ('admin','agent')),
+  agent_name    text,                                              -- exact tawk display name (agents)
+  active        boolean not null default true,
+  created_at    timestamptz not null default now()
+);
+alter table app_users enable row level security;
+
 -- Lock everything down: only the service-role key (server) may access.
 alter table chats              enable row level security;
 alter table tickets            enable row level security;

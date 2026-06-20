@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SUPABASE_CONFIGURED, getSupabase } from "@/lib/supabase";
+import { requireAuth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -26,7 +27,13 @@ const s = (v: unknown) => (v == null ? "" : String(v));
 // GET /api/chats-list?startDate=&endDate=&type=&property=&q=
 // Reads the unified chat_tags table (seeded by sync + realtime webhooks).
 export async function GET(req: NextRequest) {
+  const g = requireAuth(req);
+  if ("error" in g) return g.error;
+  const { session } = g;
   if (!SUPABASE_CONFIGURED) return NextResponse.json({ error: "Supabase not configured" }, { status: 503 });
+  // Agents are scoped to their own conversations server-side (not just by hiding UI).
+  const scopeAgent = session.role === "agent" ? session.agentName : null;
+  if (session.role === "agent" && !scopeAgent) return NextResponse.json({ rows: [] });
   const sp = req.nextUrl.searchParams;
   const startDate = sp.get("startDate");
   const endDate = sp.get("endDate");
@@ -50,6 +57,7 @@ export async function GET(req: NextRequest) {
         .range(from, from + size - 1);
       if (type === "chat" || type === "ticket") query = query.eq("type", type);
       if (property) query = query.eq("property", property);
+      if (scopeAgent) query = query.eq("agent", scopeAgent);
       const { data, error } = await query;
       if (error) throw new Error(error.message);
       const rows = (data ?? []) as TagRow[];

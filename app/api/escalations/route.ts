@@ -6,12 +6,15 @@ import {
   updateRecord,
   ListFilters,
 } from "@/lib/escalation-store";
+import { requireAdmin } from "@/lib/auth";
 
 // Always read/write fresh — never cache escalation data.
 export const dynamic = "force-dynamic";
 
 // GET /api/escalations?formId=&property=&status=&from=&to=&q=
 export async function GET(req: NextRequest) {
+  const g = requireAdmin(req);
+  if ("error" in g) return g.error;
   const { searchParams } = req.nextUrl;
   const filters: ListFilters = {
     formId: searchParams.get("formId") || undefined,
@@ -34,6 +37,8 @@ export async function GET(req: NextRequest) {
 
 // POST /api/escalations  body: { formId, data }
 export async function POST(req: NextRequest) {
+  const g = requireAdmin(req);
+  if ("error" in g) return g.error;
   try {
     const body = await req.json();
     const { formId, data } = body ?? {};
@@ -49,6 +54,8 @@ export async function POST(req: NextRequest) {
 
 // PATCH /api/escalations  body: { id, data }
 export async function PATCH(req: NextRequest) {
+  const g = requireAdmin(req);
+  if ("error" in g) return g.error;
   try {
     const body = await req.json();
     const { id, data } = body ?? {};
@@ -66,6 +73,8 @@ export async function PATCH(req: NextRequest) {
 
 // DELETE /api/escalations?id=
 export async function DELETE(req: NextRequest) {
+  const g = requireAdmin(req);
+  if ("error" in g) return g.error;
   const id = req.nextUrl.searchParams.get("id");
   if (!id) {
     return NextResponse.json({ error: "id is required" }, { status: 400 });

@@ -1,12 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getCustomAttributeRows } from "@/lib/data-source";
+import { requireAdmin } from "@/lib/auth";
 
 export const maxDuration = 300;
 
 // GET /api/attributes
 // Lists custom contact attribute definitions. Reads the synced `custom_attributes`
 // table when Supabase is configured, else queries tawk.to live.
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const g = requireAdmin(req);
+  if ("error" in g) return g.error;
   try {
     const rows = await getCustomAttributeRows();
     rows.sort(

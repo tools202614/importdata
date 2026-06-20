@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getChats } from "@/lib/data-source";
 import { PROPERTIES } from "@/lib/properties";
 import { dateKeyInTz } from "@/lib/config";
+import { requireAdmin } from "@/lib/auth";
 
 export const maxDuration = 300;
 
@@ -52,6 +53,8 @@ function formatDuration(totalSeconds: number): string {
 interface Bucket { totalSeconds: number; chatCount: number; thumbsUp: number; thumbsDown: number }
 
 export async function GET(req: NextRequest) {
+  const g = requireAdmin(req);
+  if ("error" in g) return g.error;
   const { searchParams } = req.nextUrl;
   const startDate = searchParams.get("startDate");
   const endDate = searchParams.get("endDate");
