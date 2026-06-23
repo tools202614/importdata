@@ -20,6 +20,7 @@ export const CHAT_DRIVER_OPTIONS = [
   "Channel Issue",
   "Channel, Movie & TV Series Request",
   "Blank / No Issue Recorded",
+  "Timezone",
   // Channel-issue subtypes — merged into Chat Drivers so the table needs one less column.
   "Playback Error",
   "Buffering",
