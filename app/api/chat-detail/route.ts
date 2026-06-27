@@ -25,7 +25,7 @@ function normalizeChat(raw: Raw): { messages: Msg[]; transcript: string } {
 
 // GET /api/chat-detail?id=&propertyId=&type=chat|ticket
 export async function GET(req: NextRequest) {
-  const g = requireAuth(req);
+  const g = await requireAuth(req);
   if ("error" in g) return g.error;
   const { session } = g;
   const sp = req.nextUrl.searchParams;
@@ -34,11 +34,12 @@ export async function GET(req: NextRequest) {
   const type = sp.get("type") || "chat";
   if (!id || !propertyId) return NextResponse.json({ error: "id and propertyId required" }, { status: 400 });
 
-  // Agents may only open their own conversations.
+  // Agents may only open their own conversations (normalized name match).
   if (session.role === "agent") {
-    if (!session.agentName || !SUPABASE_CONFIGURED) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const target = (session.agentName ?? "").trim().toLowerCase();
+    if (!target || !SUPABASE_CONFIGURED) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     const { data } = await getSupabase().from("chat_tags").select("agent").eq("id", id).maybeSingle();
-    if (!data || data.agent !== session.agentName) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!data || (data.agent ?? "").trim().toLowerCase() !== target) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {

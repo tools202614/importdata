@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 // GET /api/auth/agent-names — distinct agent display names seen in chat_tags,
 // so the admin can map an agent account to the exact tawk name. Admin only.
 export async function GET(req: NextRequest) {
-  const g = requireAdmin(req);
+  const g = await requireAdmin(req);
   if ("error" in g) return g.error;
   try {
     // Recent rows (PostgREST has no DISTINCT) — dedupe in JS.

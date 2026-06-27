@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 // GET /api/hourly-export?from=YYYY-MM-DD&to=YYYY-MM-DD&property=
 // Per-hour rows from hourly_counts for download.
 export async function GET(req: NextRequest) {
-  const g = requireAdmin(req);
+  const g = await requireAdmin(req);
   if ("error" in g) return g.error;
   if (!SUPABASE_CONFIGURED) return NextResponse.json({ error: "Supabase not configured" }, { status: 503 });
   const from = req.nextUrl.searchParams.get("from");

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getSessionUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-// GET /api/auth/me — current session (or 401 if not logged in).
+// GET /api/auth/me — current session, with role/name read live from the DB
+// (so account edits apply without re-login). 401 if not logged in / disabled.
 export async function GET(req: NextRequest) {
-  const session = getSession(req);
+  const session = await getSessionUser(req);
   if (!session) return NextResponse.json({ authenticated: false }, { status: 401 });
   return NextResponse.json({
     authenticated: true,

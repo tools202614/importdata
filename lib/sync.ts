@@ -158,7 +158,7 @@ export async function runSync(opts: { days?: number; onlyPropertyId?: string } =
         tagRows.push({
           id: c.id, type: "chat", property_id: prop.id, property: prop.name,
           channel_user: noNul(c.visitor?.name), email: noNul(c.visitor?.email), phone: noNul(c.visitor?.phone),
-          agent: noNul(lastTouchAgent(c)) || null, created_on: c.createdOn ?? null, last_seen: c.updatedOn ?? null, synced_at: stamp(),
+          agent: noNul(lastTouchAgent(c))?.trim() || null, created_on: c.createdOn ?? null, last_seen: c.updatedOn ?? null, synced_at: stamp(),
         });
       }
       if (!c.createdOn) continue;
@@ -180,7 +180,7 @@ export async function runSync(opts: { days?: number; onlyPropertyId?: string } =
         tagRows.push({
           id: t.id, type: "ticket", property_id: prop.id, property: prop.name,
           channel_user: noNul(t.requester?.name), email: noNul(t.requester?.email), phone: noNul(t.requester?.phone),
-          agent: noNul(t.assignee?.name), created_on: t.createdOn ?? null, last_seen: t.updatedOn ?? null, synced_at: stamp(),
+          agent: noNul(t.assignee?.name)?.trim() || null, created_on: t.createdOn ?? null, last_seen: t.updatedOn ?? null, synced_at: stamp(),
         });
       }
       if (!t.createdOn) continue;

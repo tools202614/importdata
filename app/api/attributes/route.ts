@@ -8,7 +8,7 @@ export const maxDuration = 300;
 // Lists custom contact attribute definitions. Reads the synced `custom_attributes`
 // table when Supabase is configured, else queries tawk.to live.
 export async function GET(req: NextRequest) {
-  const g = requireAdmin(req);
+  const g = await requireAdmin(req);
   if ("error" in g) return g.error;
   try {
     const rows = await getCustomAttributeRows();

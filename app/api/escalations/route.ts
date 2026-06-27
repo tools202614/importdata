@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 // GET /api/escalations?formId=&property=&status=&from=&to=&q=
 export async function GET(req: NextRequest) {
-  const g = requireAdmin(req);
+  const g = await requireAdmin(req);
   if ("error" in g) return g.error;
   const { searchParams } = req.nextUrl;
   const filters: ListFilters = {
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
 
 // POST /api/escalations  body: { formId, data }
 export async function POST(req: NextRequest) {
-  const g = requireAdmin(req);
+  const g = await requireAdmin(req);
   if ("error" in g) return g.error;
   try {
     const body = await req.json();
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
 
 // PATCH /api/escalations  body: { id, data }
 export async function PATCH(req: NextRequest) {
-  const g = requireAdmin(req);
+  const g = await requireAdmin(req);
   if ("error" in g) return g.error;
   try {
     const body = await req.json();
@@ -73,7 +73,7 @@ export async function PATCH(req: NextRequest) {
 
 // DELETE /api/escalations?id=
 export async function DELETE(req: NextRequest) {
-  const g = requireAdmin(req);
+  const g = await requireAdmin(req);
   if ("error" in g) return g.error;
   const id = req.nextUrl.searchParams.get("id");
   if (!id) {

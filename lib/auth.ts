@@ -15,6 +15,7 @@
 
 import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { SUPABASE_CONFIGURED, getSupabase } from "./supabase";
 
 export const SESSION_COOKIE = "tawk_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 12; // 12h
@@ -106,25 +107,49 @@ export function clearSessionCookie(res: NextResponse): void {
   res.cookies.set({ name: SESSION_COOKIE, value: "", path: "/", httpOnly: true, maxAge: 0 });
 }
 
+/** Token-only identity (cheap; doesn't hit the DB). */
 export function getSession(req: NextRequest): Session | null {
   return verifyToken(req.cookies.get(SESSION_COOKIE)?.value);
 }
 
+/**
+ * Resolve the request's user with FRESH role/agent_name/active from the DB.
+ * The token only identifies who they are; authorization is read live so that
+ * editing an account in the Accounts panel (name, role, disable) takes effect
+ * immediately — no re-login needed. Returns null if the account is gone/disabled.
+ */
+export async function getSessionUser(req: NextRequest): Promise<Session | null> {
+  const base = verifyToken(req.cookies.get(SESSION_COOKIE)?.value);
+  if (!base || !SUPABASE_CONFIGURED) return null;
+  try {
+    const { data, error } = await getSupabase()
+      .from("app_users")
+      .select("id, username, role, agent_name, active")
+      .eq("id", base.userId)
+      .maybeSingle();
+    if (error || !data || !data.active) return null;
+    if (data.role !== "admin" && data.role !== "agent") return null;
+    return { userId: data.id, username: data.username, role: data.role, agentName: data.agent_name ?? null };
+  } catch {
+    return null;
+  }
+}
+
 // ─── Route guards ─────────────────────────────────────────────────────────
 // Usage:
-//   const g = requireAuth(req); if ("error" in g) return g.error;
+//   const g = await requireAuth(req); if ("error" in g) return g.error;
 //   const { session } = g;
 type Guard = { session: Session } | { error: NextResponse };
 
-export function requireAuth(req: NextRequest): Guard {
+export async function requireAuth(req: NextRequest): Promise<Guard> {
   if (!AUTH_CONFIGURED) return { error: NextResponse.json({ error: "Auth not configured (set AUTH_SECRET)" }, { status: 503 }) };
-  const session = getSession(req);
+  const session = await getSessionUser(req);
   if (!session) return { error: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
   return { session };
 }
 
-export function requireAdmin(req: NextRequest): Guard {
-  const g = requireAuth(req);
+export async function requireAdmin(req: NextRequest): Promise<Guard> {
+  const g = await requireAuth(req);
   if ("error" in g) return g;
   if (g.session.role !== "admin") return { error: NextResponse.json({ error: "Admin only" }, { status: 403 }) };
   return g;

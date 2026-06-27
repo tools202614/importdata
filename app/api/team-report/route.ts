@@ -23,7 +23,7 @@ const pct = (n: number, total: number) => (total > 0 ? Math.round((n / total) * 
 
 // GET /api/team-report?from=YYYY-MM-DD&to=YYYY-MM-DD
 export async function GET(req: NextRequest) {
-  const g = requireAdmin(req);
+  const g = await requireAdmin(req);
   if ("error" in g) return g.error;
   const from = req.nextUrl.searchParams.get("from");
   const to = req.nextUrl.searchParams.get("to");

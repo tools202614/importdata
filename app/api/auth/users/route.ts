@@ -20,7 +20,7 @@ async function otherActiveAdmins(excludeId: string): Promise<number> {
 
 // GET /api/auth/users — list accounts (admin only).
 export async function GET(req: NextRequest) {
-  const g = requireAdmin(req);
+  const g = await requireAdmin(req);
   if ("error" in g) return g.error;
   const { data, error } = await getSupabase()
     .from("app_users")
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
 // POST /api/auth/users  body: { username, password, role, agentName? } (admin only)
 export async function POST(req: NextRequest) {
-  const g = requireAdmin(req);
+  const g = await requireAdmin(req);
   if ("error" in g) return g.error;
   try {
     const body = (await req.json()) ?? {};
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
 
 // PATCH /api/auth/users  body: { id, password?, role?, agentName?, active? } (admin only)
 export async function PATCH(req: NextRequest) {
-  const g = requireAdmin(req);
+  const g = await requireAdmin(req);
   if ("error" in g) return g.error;
   try {
     const body = (await req.json()) ?? {};
@@ -110,7 +110,7 @@ export async function PATCH(req: NextRequest) {
 
 // DELETE /api/auth/users  body: { id } (admin only)
 export async function DELETE(req: NextRequest) {
-  const g = requireAdmin(req);
+  const g = await requireAdmin(req);
   if ("error" in g) return g.error;
   try {
     const body = (await req.json()) ?? {};

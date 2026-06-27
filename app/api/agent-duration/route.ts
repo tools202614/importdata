@@ -53,7 +53,7 @@ function formatDuration(totalSeconds: number): string {
 interface Bucket { totalSeconds: number; chatCount: number; thumbsUp: number; thumbsDown: number }
 
 export async function GET(req: NextRequest) {
-  const g = requireAdmin(req);
+  const g = await requireAdmin(req);
   if ("error" in g) return g.error;
   const { searchParams } = req.nextUrl;
   const startDate = searchParams.get("startDate");

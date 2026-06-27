@@ -27,12 +27,14 @@ const s = (v: unknown) => (v == null ? "" : String(v));
 // GET /api/chats-list?startDate=&endDate=&type=&property=&q=
 // Reads the unified chat_tags table (seeded by sync + realtime webhooks).
 export async function GET(req: NextRequest) {
-  const g = requireAuth(req);
+  const g = await requireAuth(req);
   if ("error" in g) return g.error;
   const { session } = g;
   if (!SUPABASE_CONFIGURED) return NextResponse.json({ error: "Supabase not configured" }, { status: 503 });
   // Agents are scoped to their own conversations server-side (not just by hiding UI).
-  const scopeAgent = session.role === "agent" ? session.agentName : null;
+  // Matched case-insensitively and whitespace-trimmed so minor name differences
+  // don't hide an agent's data.
+  const scopeAgent = session.role === "agent" ? (session.agentName ?? "").trim().toLowerCase() : null;
   if (session.role === "agent" && !scopeAgent) return NextResponse.json({ rows: [] });
   const sp = req.nextUrl.searchParams;
   const startDate = sp.get("startDate");
@@ -57,7 +59,6 @@ export async function GET(req: NextRequest) {
         .range(from, from + size - 1);
       if (type === "chat" || type === "ticket") query = query.eq("type", type);
       if (property) query = query.eq("property", property);
-      if (scopeAgent) query = query.eq("agent", scopeAgent);
       const { data, error } = await query;
       if (error) throw new Error(error.message);
       const rows = (data ?? []) as TagRow[];
@@ -82,6 +83,12 @@ export async function GET(req: NextRequest) {
       channelIssue: r.channel_issue ?? [],
       channelIssueUpdatedAt: r.channel_issue_updated_at,
     }));
+
+    // Enforce agent scope on normalized names (handles casing / stray whitespace
+    // in stored data without needing a re-sync).
+    if (scopeAgent) {
+      rows = rows.filter((r) => r.agent.trim().toLowerCase() === scopeAgent);
+    }
 
     if (q) {
       rows = rows.filter((r) => [r.channelUser, r.email, r.phone, r.agent].some((v) => v.toLowerCase().includes(q)));

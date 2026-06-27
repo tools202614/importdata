@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 // GET /api/sync-state — last sync time + summary, for the UI freshness indicator.
 export async function GET(req: NextRequest) {
-  const g = requireAuth(req);
+  const g = await requireAuth(req);
   if ("error" in g) return g.error;
   if (!SUPABASE_CONFIGURED) {
     return NextResponse.json({ configured: false, lastSyncedAt: null, detail: null });
