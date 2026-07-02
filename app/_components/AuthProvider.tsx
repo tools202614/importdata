@@ -5,7 +5,7 @@ import Link from "next/link";
 
 export interface AuthUser {
   username: string;
-  role: "admin" | "agent";
+  role: "admin" | "agent" | "hr";
   agentName: string | null;
 }
 
@@ -198,6 +198,9 @@ export function UserMenu({ reportsLink = false }: { reportsLink?: boolean }) {
           ← Reports
         </Link>
       )}
+      <Link href="/profile" className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-50 transition-colors">
+        My Profile
+      </Link>
       <span className="text-gray-500">
         {user.username}
         <span className="ml-1 inline-block px-1.5 py-0.5 rounded text-[11px] bg-gray-100 text-gray-600">{user.role}</span>

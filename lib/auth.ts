@@ -23,7 +23,9 @@ const SESSION_TTL_SECONDS = 60 * 60 * 12; // 12h
 const AUTH_SECRET = process.env.AUTH_SECRET || "";
 export const AUTH_CONFIGURED = AUTH_SECRET.length >= 16;
 
-export type Role = "admin" | "agent";
+export type Role = "admin" | "agent" | "hr";
+const ROLES: Role[] = ["admin", "agent", "hr"];
+const isRole = (r: unknown): r is Role => typeof r === "string" && (ROLES as string[]).includes(r);
 export interface Session {
   userId: string;
   username: string;
@@ -83,7 +85,7 @@ export function verifyToken(token: string | undefined | null): Session | null {
   try {
     const p = JSON.parse(Buffer.from(payloadB64, "base64url").toString());
     if (typeof p.exp !== "number" || p.exp < Math.floor(Date.now() / 1000)) return null;
-    if (p.role !== "admin" && p.role !== "agent") return null;
+    if (!isRole(p.role)) return null;
     return { userId: String(p.sub), username: String(p.u), role: p.role, agentName: p.agent ?? null };
   } catch {
     return null;
@@ -128,7 +130,7 @@ export async function getSessionUser(req: NextRequest): Promise<Session | null> 
       .eq("id", base.userId)
       .maybeSingle();
     if (error || !data || !data.active) return null;
-    if (data.role !== "admin" && data.role !== "agent") return null;
+    if (!isRole(data.role)) return null;
     return { userId: data.id, username: data.username, role: data.role, agentName: data.agent_name ?? null };
   } catch {
     return null;
@@ -152,5 +154,15 @@ export async function requireAdmin(req: NextRequest): Promise<Guard> {
   const g = await requireAuth(req);
   if ("error" in g) return g;
   if (g.session.role !== "admin") return { error: NextResponse.json({ error: "Admin only" }, { status: 403 }) };
+  return g;
+}
+
+// Profile editing: HR or admin.
+export async function requireHrOrAdmin(req: NextRequest): Promise<Guard> {
+  const g = await requireAuth(req);
+  if ("error" in g) return g;
+  if (g.session.role !== "admin" && g.session.role !== "hr") {
+    return { error: NextResponse.json({ error: "HR or admin only" }, { status: 403 }) };
+  }
   return g;
 }

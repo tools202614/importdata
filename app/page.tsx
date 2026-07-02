@@ -107,9 +107,10 @@ function escapeCSV(val: string | number) {
 export default function Dashboard() {
   const { user } = useAuth();
   const router = useRouter();
-  // Agents don't use the reports dashboard — send them to their Chats view.
+  // Only admins use the reports dashboard. Send others to their home view.
   useEffect(() => {
     if (user.role === "agent") router.replace("/chats");
+    else if (user.role === "hr") router.replace("/profiles");
   }, [user.role, router]);
 
   const [tab, setTab] = useState<"report" | "agent" | "csat" | "tickets" | "drivers" | "escalations" | "teamReport">("report");
@@ -455,7 +456,7 @@ export default function Dashboard() {
   }
 
   // ─── Render ─────────────────────────────────────────
-  if (user.role === "agent") return null; // redirecting to /chats
+  if (user.role !== "admin") return null; // agents → /chats, hr → /profiles
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 shadow-sm">
@@ -470,6 +471,9 @@ export default function Dashboard() {
             </Link>
             <Link href="/accounts" className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-50 transition-colors">
               Accounts
+            </Link>
+            <Link href="/profiles" className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-50 transition-colors">
+              Profiles
             </Link>
             {syncInfo?.configured && (
               <>

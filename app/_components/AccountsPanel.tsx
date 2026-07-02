@@ -27,7 +27,7 @@ export default function AccountsPanel() {
   // New-account form
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"admin" | "agent">("agent");
+  const [role, setRole] = useState<"admin" | "agent" | "hr">("agent");
   const [agentName, setAgentName] = useState("");
   const [creating, setCreating] = useState(false);
 
@@ -139,9 +139,10 @@ export default function AccountsPanel() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Role</label>
-            <select value={role} onChange={(e) => setRole(e.target.value as "admin" | "agent")} className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
+            <select value={role} onChange={(e) => setRole(e.target.value as "admin" | "agent" | "hr")} className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
               <option value="agent">agent</option>
               <option value="admin">admin</option>
+              <option value="hr">hr</option>
             </select>
           </div>
           {role === "agent" && (
@@ -190,6 +191,7 @@ export default function AccountsPanel() {
                     >
                       <option value="agent">agent</option>
                       <option value="admin">admin</option>
+                      <option value="hr">hr</option>
                     </select>
                   </td>
                   <td className="px-3 py-2">

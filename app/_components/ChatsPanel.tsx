@@ -95,6 +95,7 @@ export default function ChatsPanel() {
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState("");
   const [live, setLive] = useState(true);
   const [loaded, setLoaded] = useState(false);
@@ -132,6 +133,23 @@ export default function ChatsPanel() {
       setError(String(err));
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Pull fresh data from tawk, then reload the list. tawk is per-property, so
+  // this re-syncs recent data for everyone; you still only see your own rows.
+  async function syncNow() {
+    setSyncing(true);
+    setError("");
+    try {
+      const res = await fetch("/api/sync-mine", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Sync failed");
+      await load();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -230,6 +248,9 @@ export default function ChatsPanel() {
           </div>
           <button onClick={load} disabled={loading} className="bg-gray-900 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50">
             {loading ? "Loading…" : "Load Chats"}
+          </button>
+          <button onClick={syncNow} disabled={syncing} className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50" title="Pull the latest chats from tawk">
+            {syncing ? "Syncing…" : "Sync now"}
           </button>
           <label className="flex items-center gap-2 text-sm text-gray-600 pb-2" title="Auto-refresh every 25s for realtime rows">
             <input type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} className="rounded" />
