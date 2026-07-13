@@ -108,9 +108,12 @@ export default function ChatsPanel() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    setFrom(today);
-    setTo(today);
+    const now = new Date();
+    const to = now.toISOString().slice(0, 10);
+    // Default to the last 7 days so the list isn't empty on a day with no chats.
+    const from = new Date(now.getTime() - 6 * 86400000).toISOString().slice(0, 10);
+    setFrom(from);
+    setTo(to);
   }, []);
 
   async function load() {
