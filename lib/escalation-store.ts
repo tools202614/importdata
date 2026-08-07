@@ -20,10 +20,17 @@ import {
   validateRecordData,
 } from "./escalations";
 
+export interface Owner {
+  createdBy?: string | null;
+  agentName?: string | null;
+}
+
 export interface ListFilters {
   formId?: string;
   property?: string;
   status?: string;
+  /** Restrict to records created by this account username (agent scoping). */
+  createdBy?: string;
   /** Issue/driver category (compared against the form's driver field). */
   driver?: string;
   /** YYYY-MM-DD inclusive lower bound (compared against the form's date field). */
@@ -49,6 +56,7 @@ function applyFilters(all: EscalationRecord[], filters: ListFilters): Escalation
   const filtered = all.filter((r) => {
     const form = getForm(r.formId);
     if (filters.formId && r.formId !== filters.formId) return false;
+    if (filters.createdBy && r.createdBy !== filters.createdBy) return false;
 
     if (filters.property) {
       const propKey = form?.propertyKey;
@@ -68,7 +76,7 @@ function applyFilters(all: EscalationRecord[], filters: ListFilters): Escalation
       if (filters.to && d > filters.to) return false;
     }
     if (q) {
-      const haystack = Object.values(r.data).join(" ").toLowerCase();
+      const haystack = [...Object.values(r.data), r.agentName ?? "", r.createdBy ?? ""].join(" ").toLowerCase();
       if (!haystack.includes(q)) return false;
     }
     return true;
@@ -85,28 +93,34 @@ interface SbRow {
   id: string;
   form_id: string;
   data: Record<string, string>;
+  created_by: string | null;
+  agent_name: string | null;
   created_at: string;
   updated_at: string;
 }
 
 function mapRow(r: SbRow): EscalationRecord {
-  return { id: r.id, formId: r.form_id, createdAt: r.created_at, updatedAt: r.updated_at, data: r.data };
+  return {
+    id: r.id, formId: r.form_id, createdAt: r.created_at, updatedAt: r.updated_at,
+    data: r.data, createdBy: r.created_by ?? null, agentName: r.agent_name ?? null,
+  };
 }
 
 async function sbList(filters: ListFilters): Promise<EscalationRecord[]> {
   const sb = getSupabase();
   let query = sb.from("escalations").select("*").limit(10000);
   if (filters.formId) query = query.eq("form_id", filters.formId);
+  if (filters.createdBy) query = query.eq("created_by", filters.createdBy);
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return applyFilters((data as SbRow[]).map(mapRow), filters);
 }
 
-async function sbCreate(formId: string, clean: Record<string, string>): Promise<EscalationRecord> {
+async function sbCreate(formId: string, clean: Record<string, string>, owner: Owner): Promise<EscalationRecord> {
   const sb = getSupabase();
   const { data, error } = await sb
     .from("escalations")
-    .insert({ form_id: formId, data: clean })
+    .insert({ form_id: formId, data: clean, created_by: owner.createdBy ?? null, agent_name: owner.agentName ?? null })
     .select("*")
     .single();
   if (error) throw new Error(error.message);
@@ -137,6 +151,13 @@ async function sbUpdate(id: string, rawData: Record<string, unknown>): Promise<E
     .single();
   if (error) throw new Error(error.message);
   return mapRow(data as SbRow);
+}
+
+async function sbGet(id: string): Promise<EscalationRecord | null> {
+  const sb = getSupabase();
+  const { data, error } = await sb.from("escalations").select("*").eq("id", id).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? mapRow(data as SbRow) : null;
 }
 
 async function sbDelete(id: string): Promise<boolean> {
@@ -185,19 +206,29 @@ export async function listRecords(filters: ListFilters = {}): Promise<Escalation
   return applyFilters(await fileReadAll(), filters);
 }
 
-export async function createRecord(formId: string, data: Record<string, unknown>): Promise<EscalationRecord> {
+/** Fetch a single record (for ownership checks), or null if not found. */
+export async function getRecord(id: string): Promise<EscalationRecord | null> {
+  if (SUPABASE_CONFIGURED) return sbGet(id);
+  const all = await fileReadAll();
+  return all.find((r) => r.id === id) ?? null;
+}
+
+export async function createRecord(formId: string, data: Record<string, unknown>, owner: Owner = {}): Promise<EscalationRecord> {
   const form = getForm(formId);
   if (!form) throw new Error(`Unknown form: ${formId}`);
   const clean = sanitizeRecordData(form, data);
   const errors = validateRecordData(form, clean);
   if (errors.length) throw new Error(errors.join("; "));
 
-  if (SUPABASE_CONFIGURED) return sbCreate(formId, clean);
+  if (SUPABASE_CONFIGURED) return sbCreate(formId, clean, owner);
 
   return withLock(async () => {
     const all = await fileReadAll();
     const now = new Date().toISOString();
-    const record: EscalationRecord = { id: crypto.randomUUID(), formId, createdAt: now, updatedAt: now, data: clean };
+    const record: EscalationRecord = {
+      id: crypto.randomUUID(), formId, createdAt: now, updatedAt: now, data: clean,
+      createdBy: owner.createdBy ?? null, agentName: owner.agentName ?? null,
+    };
     all.push(record);
     await fileWriteAll(all);
     return record;

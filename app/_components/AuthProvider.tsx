@@ -198,6 +198,11 @@ export function UserMenu({ reportsLink = false }: { reportsLink?: boolean }) {
           ← Reports
         </Link>
       )}
+      {(user.role === "agent" || user.role === "admin") && (
+        <Link href="/escalations" className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-50 transition-colors">
+          Chargebacks
+        </Link>
+      )}
       <Link href="/profile" className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-50 transition-colors">
         My Profile
       </Link>

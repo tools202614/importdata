@@ -62,7 +62,31 @@ const CHARGEBACK: FormDef = {
   ],
 };
 
-export const ESCALATION_FORMS: FormDef[] = [CHARGEBACK];
+// ─── Refund ──────────────────────────────────────────────────────────────
+// Mirrors Chargeback with refund-appropriate statuses. (Fields were never
+// formally specced — adjust here if the real Refund form differs.)
+const REFUND: FormDef = {
+  id: "refund",
+  title: "Refund",
+  statusKey: "status",
+  propertyKey: "property",
+  fields: [
+    { key: "property", label: "Property", type: "select", options: PROPERTY_OPTIONS, required: true },
+    { key: "customerName", label: "Customer Name", type: "text", required: true },
+    { key: "email", label: "Email Address", type: "email" },
+    { key: "amount", label: "Amount", type: "number" },
+    {
+      key: "status",
+      label: "Status",
+      type: "select",
+      options: ["Pending", "Approved", "Processed", "Denied", "Done"],
+      required: true,
+    },
+    { key: "reason", label: "Reason", type: "textarea" },
+  ],
+};
+
+export const ESCALATION_FORMS: FormDef[] = [CHARGEBACK, REFUND];
 
 export function getForm(formId: string): FormDef | undefined {
   return ESCALATION_FORMS.find((f) => f.id === formId);
@@ -75,6 +99,8 @@ export interface EscalationRecord {
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
   data: Record<string, string>;
+  createdBy?: string | null; // account username that created it
+  agentName?: string | null; // creator's display/agent name
 }
 
 /** Validate a submitted data object against a form's schema. Returns error strings. */
