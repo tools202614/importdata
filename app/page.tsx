@@ -471,12 +471,8 @@ export default function Dashboard() {
             <Link href="/accounts" className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-50 transition-colors">
               Accounts
             </Link>
-            <a href="https://tools.getva365.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-50 transition-colors"
-            >
-              Property Websites Status
+            <a href="https://tools.getva365.com" className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-50 transition-colors">
+            Property Websites Status
             </a>
             <Link href="/profiles" className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-50 transition-colors">
               Profiles
