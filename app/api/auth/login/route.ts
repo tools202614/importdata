@@ -37,3 +37,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: String(err) }, { status: 400 });
   }
 }
+
+<button
+  type="button"
+  onclick="window.location.href='https://your-target-url.com'"
+  style="
+    padding: 10px 20px;
+    background: #1E4B3C;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  "
+>
+  Go to Site
+</button>
