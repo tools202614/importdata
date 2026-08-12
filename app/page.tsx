@@ -463,7 +463,6 @@ export default function Dashboard() {
         <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Tawk.to Reports</h1>
-            <p className="text-sm text-gray-500 mt-1">Generate daily chat volume and agent reports</p>
           </div>
           <div className="flex items-center gap-3 text-sm shrink-0">
             <Link href="/chats" className="bg-gray-900 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-gray-800 transition-colors">
