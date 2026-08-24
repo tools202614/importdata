@@ -19,7 +19,7 @@ export const TEAMS: Team[] = [
   {
     name: "Sunshine",
     title: "TEAM SUNSHINE",
-    properties: ["Creativetain", "BringTheStreams", "Streamsdepot", "Axentv", "PhoxStreams", "Gyrostreams", "Dipiptv"],
+    properties: ["Creativetain", "BringTheStreams", "Streamsdepot", "Axentv", "PhoxStreams", "Gyrostreams", "Dipiptv", "PrimoChannel", "Firestreams", "Speedygo"],
   },
   {
     name: "PY/FMB",
