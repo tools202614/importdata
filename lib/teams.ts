@@ -29,7 +29,7 @@ export const TEAMS: Team[] = [
   {
     name: "Powell",
     title: "TEAM POWELL",
-    properties: ["AllSmartMedia", "ILML3",],
+    properties: ["AllSmartMedia", "ILML3"],
   },
 ];
 
