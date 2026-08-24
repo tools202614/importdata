@@ -31,6 +31,11 @@ export const TEAMS: Team[] = [
     title: "TEAM POWELL",
     properties: ["AllSmartMedia", "ILML3", "One Love Streaming"],
   },
+  {
+    name: "Inigo",
+    title: "TEAM INIGO",
+    properties: ["Carefreestreams"],
+  },
 ];
 
 /** Map a property name to its team name, or null if unassigned. */
