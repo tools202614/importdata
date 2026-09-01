@@ -2,10 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { SUPABASE_CONFIGURED, getSupabase } from "@/lib/supabase";
 import { PROPERTIES } from "@/lib/properties";
+import { getChatById, getTicketById } from "@/lib/tawk-api";
 
 export const dynamic = "force-dynamic";
 
 const PROP_NAME = new Map(PROPERTIES.map((p) => [p.id, p.name]));
+
+// The tawk webhook payload carries NO agent, so the row would be blank until the
+// daily sync backfilled it (and agents can't see a blank-agent chat). Resolve the
+// last-touch agent from the tawk API instead — chats at :end, tickets by assignee.
+function lastTouchAgentFromRaw(raw: Record<string, unknown>): string {
+  const msgs = (raw?.messages as { sender?: { t?: string; n?: string } }[] | undefined) || [];
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const s = msgs[i]?.sender;
+    if (s?.t === "a" && s?.n) return s.n;
+  }
+  const agent = raw?.agent as { name?: string } | undefined;
+  return agent?.name || (raw?.agentName as string) || "";
+}
 
 // PostgreSQL rejects U+0000 (null) in jsonb/text (SQLSTATE 22P05). Strip it.
 const noNul = (s: string): string => s.replace(new RegExp(String.fromCharCode(0), "g"), "");
@@ -86,6 +100,20 @@ export async function POST(req: NextRequest) {
   // chat:start / ticket:create → set created_on; chat:end (or any event) → bump last_seen.
   if (event.endsWith(":start") || event.endsWith(":create")) row.created_on = time;
   row.last_seen = String(pick(body, "time") ?? new Date().toISOString());
+
+  // Resolve the agent from the tawk API (payload has none). Best-effort: if it
+  // fails or isn't ready yet, the agent stays unset and the daily sync backfills.
+  try {
+    if (isTicket) {
+      const t = await getTicketById(propertyId, id);
+      const a = noNul(String((t?.assignee as { name?: string } | undefined)?.name ?? "")).trim();
+      if (a) row.agent = a;
+    } else if (event.endsWith(":end")) {
+      const chat = await getChatById(propertyId, id);
+      const a = noNul(lastTouchAgentFromRaw(chat)).trim();
+      if (a) row.agent = a;
+    }
+  } catch { /* agent stays unset; sync will backfill */ }
 
   try {
     const { error } = await getSupabase().from("chat_tags").upsert(row, { onConflict: "id" });
