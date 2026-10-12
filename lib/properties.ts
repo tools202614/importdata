@@ -26,6 +26,7 @@ export const PROPERTIES = [
   { id: "6721adb04304e3196ada729c", name: "Rockstreamstv" },
   { id: "6abe6fbf9762d834392b343b", name: "Roseprime" },
   { id: "60e8b708649e0a0a5ccb710f", name: "Speedygo" },
+  { id: "6ac434f80d908934c644e48a", name: "Streams" },
   { id: "68ca189af92486192425d2ed", name: "StreamEmpire" },
   { id: "646ab139ad80445890ee44d2", name: "Streamsdepot" },
   { id: "66a405bb32dca6db2cb658f2", name: "WL4L" },
