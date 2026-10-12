@@ -30,5 +30,5 @@ export const PROPERTIES = [
   { id: "68ca189af92486192425d2ed", name: "StreamEmpire" },
   { id: "646ab139ad80445890ee44d2", name: "Streamsdepot" },
   { id: "66a405bb32dca6db2cb658f2", name: "WL4L" },
-  { id: "66a405bb32dca6db2cb658f2", name: "Void Streams" },
+  { id: "6a9980bae4bdfc34440e5f04", name: "Void Streams" },
 ];
