@@ -34,7 +34,7 @@ export const TEAMS: Team[] = [
   {
     name: "Inigo",
     title: "TEAM INIGO",
-    properties: ["Carefreestreams", "Streams"],
+    properties: ["Carefreestreams", "Streams", "Void Streams"],
   },
 ];
 
